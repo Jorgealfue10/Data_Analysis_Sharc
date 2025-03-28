@@ -224,3 +224,52 @@ def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz):
 
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001\n")
+
+def write_NoSOC_QMout(data,e_mat,tmx,tmy,tmz,dyson,file_out):
+    
+    with open(file_out,'w') as file:
+        file.write("[Molden Format]\n")
+        file.write("\n[Atoms] Angs\n")
+        for line in data: 
+            if line.strip() == "":
+                break
+            else:
+                file.write(line+"\n")
+
+        file.write("! 1 Hamiltonian Matrix ("+str(len(e_mat))+"x"+str(len(e_mat))+", complex)\n")
+        file.write(str(len(e_mat))+" "+str(len(e_mat))+"\n")
+
+        for e in e_mat:
+            file.write(" ".join(f"{en:.12f}" for en in (list(e)))+"\n")
+
+        file.write("\n")
+
+        file.write("! 2 Dipole Moment Matrices (3x"+str(len(tmx))+"x"+str(len(tmx))+", complex)\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for y in tmy:
+            y=list(y)
+            y[:]=[0]*len(y)
+            file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for d in dyson:
+            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for z in tmz:
+            z=list(z)
+            z[:]=[0]*len(z)
+            file.write(" ".join(f"{tz:.12f}" for tz in (list(z)))+"\n")
+
+        file.write("\n")
+        file.write("! 11 Property Matrix ("+str(len(dyson))+"x"+str(len(dyson))+", complex)\n")
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for x in tmx:
+            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
+
+        file.write("\n")
+
+        file.write("! 8 Runtime\n")
+        file.write("6.90000000000000E+001")
+
