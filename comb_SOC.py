@@ -25,5 +25,6 @@ dyson_mat=read_Dyson(PHPHM,PHPHM_stts)
 xyz=getxyz(PHPHM,PHPHM_stts)
 tmx,tmy,tmz=read_tm(PHPHM,PHPHM_stts)
 
+outfile=salida_dir+"/QM.out"
 write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile)
 
