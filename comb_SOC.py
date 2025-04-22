@@ -1,9 +1,15 @@
 import numpy as np
+import sys
 from lib_QMout import *
 
-PH=read_qmout("PHQM.out")
-PHM=read_qmout("PHMQM.out")
-PHPHM=read_qmout("PHPHMQM.out")
+qmout_phm = sys.argv[1]
+qmout_ph = sys.argv[2]
+qmout_mrci = sys.argv[3]
+salida_dir = sys.argv[4]
+
+PH=read_qmout(qmout_ph)
+PHM=read_qmout(qmout_phm)
+PHPHM=read_qmout(qmout_mrci)
 
 PH_stts,PH_stts_num=getNstates(PH)
 PHM_stts,PHM_stts_num=getNstates(PHM)
@@ -19,9 +25,5 @@ dyson_mat=read_Dyson(PHPHM,PHPHM_stts)
 xyz=getxyz(PHPHM,PHPHM_stts)
 tmx,tmy,tmz=read_tm(PHPHM,PHPHM_stts)
 
-write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz)
+write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile)
 
-
-    
-
-    

@@ -171,9 +171,10 @@ def getxyz(data,nat):
 
     return xyz
 
-def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz):
+def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
     # Writing the new output
-    with open("PHPHM_SOC.out","w") as file:
+    #with open("PHPHM_SOC.out","w") as file:
+    with open(outfile,"w") as file:
 
         file.write("! 0 Basic information\n")
         file.write("states ")
