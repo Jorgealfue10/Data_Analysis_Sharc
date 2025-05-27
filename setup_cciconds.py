@@ -149,8 +149,6 @@ def write_MRCC_input(geoms,stts):
 
             f.write("basis=AVTZ \n")
 
-            f.write("{hf \n wf,16,1,2 \n } \n")
-
             ePH_vars = []
 
             for k, states in enumerate(stts):
