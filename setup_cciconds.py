@@ -57,12 +57,17 @@ def makedirs(path,icond):
     print(f"Directory created: {dir_path}" if os.path.exists(dir_path) else f"Directory already exists: {dir_path}")
     return dir_path
 
-def write_MRCI_input(geoms,frozen,closed,occ):
+def write_MRCI_input(geoms,frozen,closed,occ,stts):
     """
-    Escribe un archivo input para MRCI a partir de las geometrías proporcionadas.
+    Escribe inputs de MRCI para todas las geometrías.
 
-    :param geoms: np.array, geometrías de las moléculas (nat x niconds x 3)
+    :param geoms: array (nat x nicond x 3) con coordenadas
+    :param frozen: núm. de orbitales congelados
+    :param closed: núm. de orbitales cerrados
+    :param occ: núm. de orbitales ocupados
+    :param stts: lista de estados [[electrones, estados], ...]
     """
+
     for i in range(geoms.shape[1]):
         dir_path = makedirs("./MRCI/",i)
         with open(dir_path + "input.inp", 'w') as f:
@@ -72,10 +77,9 @@ def write_MRCI_input(geoms,frozen,closed,occ):
 
             f.write("geometry={ \n")
             for j in range(geoms.shape[0]):
-                if j == 0:
-                    f.write(f" P {geoms[j,i,0]} {geoms[j,i,1]} {geoms[j,i,2]}\n")
-                else:   
-                    f.write(f" H {geoms[j,i,0]} {geoms[j,i,1]} {geoms[j,i,2]}\n")
+                element = "P" if j == 0 else "H"
+                x,y,z = geoms[j,i]
+                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")\n")
             f.write("} \n \n")
 
             f.write("gprint,orbitals,civectors; \n")
@@ -87,46 +91,37 @@ def write_MRCI_input(geoms,frozen,closed,occ):
 
             f.write("{multi, \n")
             f.write("frozen," + str(frozen) + "\n closed, " + str(closed) + " \n occ, " + str(occ) + " \n")
-            f.write("wf,16,1,2 \n state,1 \n")
-            f.write("wf,15,1,1 \n state,5 \n")
-            f.write("wf,15,1,3 \n state,1 \n")
+            for i, states in enumerate(stts):
+                if isinstance(states, list) and states[1] != 0:
+                    f.write(f"wf,{states[0]},1,{i} \n state,{states[1]} \n")
             f.write("} \n \n")
 
-            f.write("{mrci \n")
-            f.write("core,1 \n")
-            f.write("wf,16,1,2 \n state,1 \n")
-            f.write("maxiter,250,1000 \n")
-            f.write("} \n")
-            f.write("ePH=energy \n")
-            f.write("ePHQ=energd \n")
+            ePH_vars = []
+            ePHQ_vars = []
 
-            f.write("\n")
+            for k, states in enumerate(stts):
+                if isinstance(states, list) and states[1] != 0:
+                    f.write("{mrci \n")
+                    f.write("core,1 \n")
+                    f.write(f"wf,{states[0]},1,{k} \n state,{states[1]} \n")
+                    f.write("maxiter,250,1000 \n")
+                    f.write("} \n")
+                    if states[1] < 1:
+                        f.write(f"ePH{k}=energy \n")
+                        f.write(f"ePHQ{k}=energd \n")
+                    else:
+                        f.write(f"ePH{k}=energy(1) \n")
+                        f.write(f"ePHQ{k}=energd(1) \n")
 
-            f.write("{mrci \n")
-            f.write("core,1 \n")
-            f.write("wf,15,1,1 \n state,2 \n")
-            f.write("maxiter,250,1000 \n")
-            f.write("} \n")
-            f.write("ePHM1=energy(1) \n")
-            f.write("ePHM1Q=energd(1) \n")
-
-            f.write("\n")
-
-            f.write("{mrci \n")
-            f.write("core,1 \n")
-            f.write("wf,15,1,3 \n state,1 \n")
-            f.write("maxiter,250,1000 \n")
-            f.write("} \n")
-            f.write("ePHM2=energy(1) \n")
-            f.write("ePHM2Q=energd(1) \n")
+                    ePH_vars.append(f"ePH{k}")
+                    ePHQ_vars.append(f"ePHQ{k}")
             
-            f.write("\n")
+            f.write("table, " + ", ".join(ePH_vars) + "\n")
+            f.write(f"save, energies.dat \n")
 
-            f.write("table, (ePHM1-ePH)*27.2114, (ePHM2-ePH)*27.2114 \n")
-            f.write("save, " + dir_path + "Ediff.dat \n")
+            f.write("table, " + ", ".join(ePHQ_vars) + "\n")
+            f.write(f"save, energiesQ.dat \n")
 
-            f.write("table, (ePHM1Q-ePHQ)*27.2114, (ePHM2Q-ePHQ)*27.2114 \n")
-            f.write("save, " + dir_path + "EdiffQ.dat \n")
             
 
 data=read_file("initconds")
@@ -134,6 +129,8 @@ geoms=get_geoms(data, 2, 50)
 for i in range(51):
     print(geoms[:,i,:])
 
-stts = [0,5,1,1]
+sttsPH = [[16,0],[15,5],[16,1],[15,1]]
+sttsPH2 = [[16,0],5,1,1]
+sttsPH3 = [[16,0],5,1,1]
 
-write_MRCI_input(geoms,0,1,10)
+write_MRCI_input(geoms,0,1,10,sttsPH)
