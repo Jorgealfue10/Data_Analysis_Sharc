@@ -122,7 +122,53 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts):
             f.write("table, " + ", ".join(ePHQ_vars) + "\n")
             f.write(f"save, energiesQ.dat \n")
 
-            
+def write_MRCC_input(geoms,stts):
+    """
+    Generates MRCC input files for each geometry configuration.
+
+    :param geoms: numpy array of shape (nat, niconds+1, 3) containing atomic coordinates for each geometry configuration.
+    :param stts: list of states, where each state is represented by a list containing the state information required for the MRCC input.
+    """
+
+    for i in range(geoms.shape[1]):
+        dir_path = makedirs("./MRCC/",i)
+        with open(dir_path / "input.inp", 'w') as f:
+            f.write("***,MOLPRO input for MRCC \n")
+            f.write("memory,300 \n")
+            f.write("nosym \nbohr \n")
+
+            f.write("geometry={ \n")
+            for j in range(geoms.shape[0]):
+                element = "P" if j == 0 else "H"
+                x,y,z = geoms[j,i]
+                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
+            f.write("} \n \n")
+
+            f.write("gprint,orbitals,civectors; \n")
+            f.write("gthresh,thrprint=0.,printci=0.0000000500; \n \n")
+
+            f.write("basis=AVTZ \n")
+
+            f.write("{hf \n wf,16,1,2 \n } \n")
+
+            ePH_vars = []
+
+            for k, states in enumerate(stts):
+                if isinstance(states, list) and states[1] != 0:
+                    f.write("{hf \n")
+                    f.write(f"wf,{states[0]},1,{k} \n")
+                    f.write("} \n \n")
+
+                    f.write("{mrcc,methos=ccsd(t),dir=mrccdir \n")
+                    f.write(f"wf,{states[0]},1,{k} \n state,{states[1]} \n")
+                    f.write("} \n")
+                    f.write(f"ePH{k}=energy \n")
+
+                    ePH_vars.append(f"ePH{k}")
+
+            f.write("table, " + ", ".join(ePH_vars) + "\n")
+            f.write(f"save, energies.dat \n")
+
 
 data=read_file("initconds")
 geoms=get_geoms(data, 2, 50)
@@ -133,4 +179,5 @@ sttsPH = [[16,0],[15,5],[16,1],[15,1]]
 sttsPH2 = [[16,0],5,1,1]
 sttsPH3 = [[16,0],5,1,1]
 
-write_MRCI_input(geoms,0,1,10,sttsPH)
+# write_MRCI_input(geoms,0,1,10,sttsPH)
+write_MRCC_input(geoms,sttsPH)
