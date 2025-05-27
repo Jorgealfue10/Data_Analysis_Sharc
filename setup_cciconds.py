@@ -70,7 +70,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts):
 
     for i in range(geoms.shape[1]):
         dir_path = makedirs("./MRCI/",i)
-        with open(dir_path + "input.inp", 'w') as f:
+        with open(dir_path / "input.inp", 'w') as f:
             f.write("***,MOLPRO input for Davidson Energies MRCI \n")
             f.write("memory,300 \n")
             f.write("nosym \n bohrt \n")
