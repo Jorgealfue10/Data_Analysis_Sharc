@@ -79,7 +79,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts):
             for j in range(geoms.shape[0]):
                 element = "P" if j == 0 else "H"
                 x,y,z = geoms[j,i]
-                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")\n")
+                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
             f.write("} \n \n")
 
             f.write("gprint,orbitals,civectors; \n")
