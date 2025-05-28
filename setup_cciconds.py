@@ -57,7 +57,7 @@ def makedirs(path,icond):
     print(f"Directory created: {dir_path}" if os.path.exists(dir_path) else f"Directory already exists: {dir_path}")
     return dir_path
 
-def write_MRCI_input(geoms,frozen,closed,occ,stts):
+def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
     """
     Escribe inputs de MRCI para todas las geometrías.
 
@@ -85,7 +85,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts):
             f.write("gprint,orbitals,civectors; \n")
             f.write("gthresh,thrprint=0.,printci=0.0000000500; \n \n")
 
-            f.write("basis=AV5Z \n")
+            f.write(f"basis={basis} \n")
 
             f.write("{hf \n wf,16,1,2 \n } \n")
 
@@ -122,7 +122,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts):
             f.write("table, " + ", ".join(ePHQ_vars) + "\n")
             f.write(f"save, energiesQ.dat \n")
 
-def write_MRCC_input(geoms,stts):
+def write_MRCC_input(geoms,stts,basis):
     """
     Generates MRCC input files for each geometry configuration.
 
@@ -147,7 +147,7 @@ def write_MRCC_input(geoms,stts):
             f.write("gprint,orbitals,civectors; \n")
             f.write("gthresh,thrprint=0.,printci=0.0000000500; \n \n")
 
-            f.write("basis=AVTZ \n")
+            f.write(f"basis={basis} \n")
 
             ePH_vars = []
 
@@ -177,5 +177,6 @@ sttsPH = [[16,0],[15,5],[16,1],[15,1]]
 sttsPH2 = [[16,0],5,1,1]
 sttsPH3 = [[16,0],5,1,1]
 
-# write_MRCI_input(geoms,0,1,10,sttsPH)
-write_MRCC_input(geoms,sttsPH)
+basis="AVTZ"
+write_MRCI_input(geoms,0,5,10,sttsPH,basis)
+write_MRCC_input(geoms,sttsPH,basis)
