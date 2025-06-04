@@ -12,7 +12,11 @@ def extract_freqcord(data):
     blank_line_seen=False
     nat=0
     for line in data:
-        if 'Nr' and 'Atom' and 'Charge' in line:
+        # the check below was incorrectly written as
+        # `if 'Nr' and 'Atom' and 'Charge' in line:` which in Python only
+        # verifies the last condition due to short circuit evaluation.
+        # The intention is to start reading when all keywords are present.
+        if 'Nr' in line and 'Atom' in line and 'Charge' in line:
             start=True
             blank_line_seen=False
             continue
@@ -112,10 +116,8 @@ def extract_normal_modes(data,nfreq,nat):
     nm_freq=np.zeros((nat, nfreq, ncoord))
 
     nm_freq_start=False
-    if nfreq < 5:
-        nblocks=1
-    else:
-       nblocks=nfreq%5+1
+    # number of 5-mode blocks needed to store all frequencies
+    nblocks = (nfreq + 4) // 5
     print(nfreq,nblocks,nfreq%5)
 
     blank_line=[]
@@ -163,7 +165,8 @@ def extract_nm_lowf(data,nlowf,nat):
 
     nm_lowf_start=False
 
-    nblocks=nlowf%5+1
+    # each block contains up to 5 modes
+    nblocks = (nlowf + 4) // 5
     blank_nm_lowf=False
 
     blank_line=[]
