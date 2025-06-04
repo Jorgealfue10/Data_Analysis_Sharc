@@ -1,4 +1,13 @@
 import numpy as np
+from lib_freq_molden import (
+    read_molpro_output,
+    extract_freqcord,
+    extract_geometry,
+    extract_freqs,
+    extract_normal_modes,
+    extract_nm_lowf,
+    write_molden,
+)
 
 molpro_out="MOLPRO.out"
 molden_file="freq.molden"
