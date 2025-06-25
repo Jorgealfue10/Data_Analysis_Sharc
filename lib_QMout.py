@@ -226,17 +226,21 @@ def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001\n")
 
-def write_NoSOC_QMout(data,e_mat,tmx,tmy,tmz,dyson,file_out):
+def write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
     
     with open(file_out,'w') as file:
-        file.write("[Molden Format]\n")
-        file.write("\n[Atoms] Angs\n")
-        for line in data: 
-            if line.strip() == "":
-                break
-            else:
-                file.write(line+"\n")
 
+        file.write("! 0 Basic information\n")
+        file.write("states ")
+        for i in range(len(stts)):
+            file.write("{} ".format(stts[i]))
+        file.write("\n")
+        file.write("nmstates ")
+        file.write("{}\n".format(e_mat.shape[0]))
+        file.write("natom 2\n")
+        file.write("npc 0\n")
+        file.write("charges 0 0\n")
+        file.write("\n")
         file.write("! 1 Hamiltonian Matrix ("+str(len(e_mat))+"x"+str(len(e_mat))+", complex)\n")
         file.write(str(len(e_mat))+" "+str(len(e_mat))+"\n")
 
