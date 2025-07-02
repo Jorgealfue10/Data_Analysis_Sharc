@@ -1,4 +1,5 @@
 import numpy as np
+from itertools import combinations
 
 def read_qmout(file_path):
     with open(file_path,'r') as file:
@@ -151,7 +152,7 @@ def read_Dyson(data,stts):
                 break
             else:
                 parts=line.split()
-                dyson.append(map(float,parts))
+                dyson.append(list(map(float,parts)))
 
     return dyson
 
@@ -278,3 +279,24 @@ def write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001")
 
+def write_energy_differences(energies, prefix='diff'):
+    labels = [f"e{i+1}" for i in range(len(energies))]     
+    for (i1, e1), (i2, e2) in combinations(enumerate(energies), 2):
+        delta_e = abs(e2 - e1)
+        label1 = labels[i1]
+        label2 = labels[i2]
+        filename = f"{prefix}_{label1}_{label2}.dat"
+        with open(filename, 'w') as f:
+            f.write(f"{delta_e:.8f}  1.0\n")
+
+def write_SOC_diffs_withInt(energies, dyson, prefix='soc_diff'):
+    labels = [f"e{i+1}" for i in range(len(energies))]     
+    for i in range(len(energies)):
+        for j in range(i+1, len(energies)):
+            delta_e = abs(energies[j] - energies[i])
+            label1 = labels[i]
+            label2 = labels[j]
+            filename = f"{prefix}_{label1}_{label2}.dat"
+            intensity = delta_e * abs(dyson[i][2*j])**2
+            with open(filename, 'w') as f:
+                f.write(f"{delta_e:.8f}  {intensity:.8f}\n")
