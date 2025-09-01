@@ -51,7 +51,7 @@ def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
     :param mult1: list, lista con el número de estados por cada multiplicidad
     :param mult2: list, lista con el número de estados por cada multiplicidad
     :param total_stts: list, lista con el número total de estados por cada multiplicidad
-    :param final_matrix: np.array, matriz destino con energías en la diagonal (M x 2M, compleja)
+    :param final_matrix: np.array, matriz destino con energías en la diagonal (M x 2M, compleja, M=N1+N2)
     :return: np.array, matriz final con acoplamientos correctamente mapeados
     """
     # Convertir listas a arrays de NumPy si es necesario
