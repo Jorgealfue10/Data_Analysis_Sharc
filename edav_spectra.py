@@ -19,4 +19,5 @@ dyson = np.array(dyson)
 e_mat= np.array(e_mat)
 for i in range(len(e_mat)):
     e_mat[i][2*i] = energias_SO[i]
-write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,"./test_qm.out")
+# write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,"./test_qm.out")
+write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,"./test_qm.out")

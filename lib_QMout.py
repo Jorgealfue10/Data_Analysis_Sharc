@@ -279,6 +279,58 @@ def write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001")
 
+def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
+    
+    with open(file_out,'w') as file:
+
+        file.write("! 0 Basic information\n")
+        file.write("states ")
+        for i in range(len(stts)):
+            file.write("{} ".format(stts[i]))
+        file.write("\n")
+        file.write("nmstates ")
+        file.write("{}\n".format(e_mat.shape[0]))
+        file.write("natom 2\n")
+        file.write("npc 0\n")
+        file.write("charges 0 0\n")
+        file.write("\n")
+        file.write("! 1 Hamiltonian Matrix ("+str(len(e_mat))+"x"+str(len(e_mat))+", complex)\n")
+        file.write(str(len(e_mat))+" "+str(len(e_mat))+"\n")
+
+        for e in e_mat:
+            file.write(" ".join(f"{en:.12f}" for en in (list(e)))+"\n")
+
+        file.write("\n")
+
+        file.write("! 2 Dipole Moment Matrices (3x"+str(len(tmx))+"x"+str(len(tmx))+", complex)\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for y in tmy:
+            y=list(y)
+            y[:]=[0]*len(y)
+            file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for d in dyson:
+            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
+
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for z in tmz:
+            z=list(z)
+            z[:]=[0]*len(z)
+            file.write(" ".join(f"{tz:.12f}" for tz in (list(z)))+"\n")
+
+        file.write("\n")
+        file.write("! 11 Property Matrix ("+str(len(dyson))+"x"+str(len(dyson))+", complex)\n")
+        file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
+        for x in tmx:
+            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
+
+        file.write("\n")
+
+        file.write("! 8 Runtime\n")
+        file.write("6.90000000000000E+001")
+
 def write_energy_differences(energies, prefix='diff'):
     labels = [f"e{i+1}" for i in range(len(energies))]     
     for (i1, e1), (i2, e2) in combinations(enumerate(energies), 2):
