@@ -79,12 +79,16 @@ def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
     M = final_matrix.shape[0]  # Tamaño de la matriz final
     mapped_matrix = np.zeros((M, M), dtype=complex)
     
+    for i in range(matrix1.shape[0]):
+        for j in range(matrix1.shape[1]):
+            print("Matrix1",i,j,matrix1[i][j])
     # Mapping the values from the original matrices to the final matrix
     # The indexes are mapped taking into account the #proj per multiplicities
     sidx,sidx1,sidx2=0,0,0
     for i in range(len(total_stts)):
         if total_stts[i] == mult1[i]:
             for j in range(int(total_stts[i])*(i+1)):
+                # print(i,j,total_stts[i],mult1[i],mult2[i])
                 for k in range(int(total_stts[i])*(i+1)):
                     new_j,new_k=sidx+j,sidx+k
                     if new_j != new_k:
@@ -311,8 +315,8 @@ def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
             file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
 
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
-        for d in dyson:
-            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
+        for x in tmx:
+            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
 
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
         for z in tmz:
@@ -323,9 +327,9 @@ def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("\n")
         file.write("! 11 Property Matrix ("+str(len(dyson))+"x"+str(len(dyson))+", complex)\n")
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
-        for x in tmx:
-            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
-
+        for d in dyson:
+            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
+        
         file.write("\n")
 
         file.write("! 8 Runtime\n")

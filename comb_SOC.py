@@ -19,6 +19,8 @@ PH_EMat=getE(PH,PH_stts)
 PHM_EMat=getE(PHM,PHM_stts)
 PHPHM_EMat=getE(PHPHM,PHPHM_stts)
 
+print(PH_EMat)
+
 final_mat=map_acoplamientos(PH_EMat,PHM_EMat,PH_stts_num,PHM_stts_num,PHPHM_stts_num,PHPHM_EMat)
 
 dyson_mat=read_Dyson(PHPHM,PHPHM_stts)
