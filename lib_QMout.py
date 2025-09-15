@@ -1,11 +1,13 @@
 import numpy as np
 from itertools import combinations
 
+# Reads QM.out file and returns its content as a list of lines
 def read_qmout(file_path):
     with open(file_path,'r') as file:
         data=file.readlines()
     return data
 
+# Gets the number of states and their multiplicities from the QM.out data
 def getNstates(data):
     onlyonce=False
     for line in data:
@@ -21,6 +23,7 @@ def getNstates(data):
     
     return total_stts,stts
 
+# Extracts the Hamiltonian matrix (energies) from the QM.out data
 def getE(data,stts):
     start_readE=False
     e_mat=[]
@@ -42,6 +45,7 @@ def getE(data,stts):
 
     return e_mat
 
+# Maps coupling values from two original matrices into the final matrix v1.0
 def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
     """
     Mapea los valores fuera de la diagonal de dos matrices de acoplamiento en la matriz final.
@@ -109,6 +113,7 @@ def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
 
     return mapped_matrix
 
+# Reads transition moment matrices from QM.out data
 def read_tm(data,stts):
     tmx,tmy,tmz=[],[],[]
 
@@ -139,6 +144,7 @@ def read_tm(data,stts):
                 
     return tmx,tmy,tmz
 
+# Reads Dyson matrix from QM.out data
 def read_Dyson(data,stts):
     dyson=[]
     start_read=False
@@ -160,6 +166,7 @@ def read_Dyson(data,stts):
 
     return dyson
 
+# Gets the atomic coordinates from QM.out data
 def getxyz(data,nat):
     strt_xyz=False
     xyz=[]
@@ -176,6 +183,7 @@ def getxyz(data,nat):
 
     return xyz
 
+# Writes the final output QM.out file with SOC and changing the Dyson matrix
 def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
     # Writing the new output
     #with open("PHPHM_SOC.out","w") as file:
@@ -231,6 +239,7 @@ def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001\n")
 
+# Writes the final output QM.out file without SOC and changing Dyson matrix
 def write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
     
     with open(file_out,'w') as file:
@@ -283,6 +292,7 @@ def write_NoSOC_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001")
 
+# Writes the final output QM.out file without SOC and without Dyson matrix
 def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
     
     with open(file_out,'w') as file:
@@ -335,6 +345,7 @@ def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("! 8 Runtime\n")
         file.write("6.90000000000000E+001")
 
+# Writes energy differences between states to separate files
 def write_energy_differences(energies, prefix='diff'):
     labels = [f"e{i+1}" for i in range(len(energies))]     
     for (i1, e1), (i2, e2) in combinations(enumerate(energies), 2):
@@ -345,6 +356,7 @@ def write_energy_differences(energies, prefix='diff'):
         with open(filename, 'w') as f:
             f.write(f"{delta_e:.8f}  1.0\n")
 
+# Writes energy differences and intensities based on Dyson matrix to separate files
 def write_SOC_diffs_withInt(energies, dyson, prefix='soc_diff'):
     labels = [f"e{i+1}" for i in range(len(energies))]     
     for i in range(len(energies)):
@@ -356,3 +368,112 @@ def write_SOC_diffs_withInt(energies, dyson, prefix='soc_diff'):
             intensity = delta_e * abs(dyson[i][2*j])**2
             with open(filename, 'w') as f:
                 f.write(f"{delta_e:.8f}  {intensity:.8f}\n")
+
+# Transforms SHARC-type printed complex matrices to standard complex NumPy arrays and vice versa
+def _to_complex(M: np.ndarray) -> np.ndarray:
+    M = np.asarray(M)
+    assert M.ndim == 2 and M.shape[1] == 2*M.shape[0], f"Esperaba (N,2N), obtuve {M.shape}"
+    return M[:, 0::2] + 1j*M[:, 1::2]
+
+def _from_complex(C: np.ndarray) -> np.ndarray:
+    C = np.asarray(C)
+    N = C.shape[0]
+    out = np.empty((N, 2*N), dtype=float)
+    out[:, 0::2] = C.real
+    out[:, 1::2] = C.imag
+    return out
+
+# Cumulative offsets for block indexing
+def _cum_offsets(lengths: list[int]) -> list[int]:
+    offs = [0]
+    for x in lengths[:-1]:
+        offs.append(offs[-1] + x)
+    return offs
+
+# Generalized mapping of coupling matrices into a final matrix, preserving diagonals
+def map_acoplamientos_general(
+    matrix1: np.ndarray,       # (N1 x 2N1) Re/Im intercalado
+    matrix2: np.ndarray,       # (N2 x 2N2) Re/Im intercalado
+    mult1: list[int],          # nº de ESTADOS por multiplicidad en matrix1 (sin MS)
+    mult2: list[int],          # nº de ESTADOS por multiplicidad en matrix2 (sin MS)
+    total_stts: list[int],     # nº TOTAL de ESTADOS por multiplicidad en la final (sin MS)
+    final_matrix: np.ndarray   # (M x 2M) con energías en la diagonal (Re/Im intercalado)
+) -> np.ndarray:
+    """
+    Mapea TODOS los acoplamientos (no diagonales) que ya están dentro de matrix1 y matrix2
+    a la matriz final común, respetando multiplicidades y proyecciones MS, y preservando
+    la diagonal (energías) de final_matrix.
+    """
+    L = len(total_stts)  # nº de multiplicidades (S=0, 1/2, 1, ...)
+    # Alinear longitudes por si mult1/mult2 son más cortas:
+    mult1 = list(mult1) + [0]*max(0, L - len(mult1))
+    mult2 = list(mult2) + [0]*max(0, L - len(mult2))
+
+    # Proyecciones por multiplicidad: P = (m_idx+1) * nº_estados
+    Ptot = [(m+1)*total_stts[m] for m in range(L)]
+    P1   = [(m+1)*mult1[m]      for m in range(L)]
+    P2   = [(m+1)*mult2[m]      for m in range(L)]
+
+    # Convertir a complejo (si la matriz existe)
+    C1 = _to_complex(matrix1) if matrix1 is not None and np.size(matrix1) else None
+    C2 = _to_complex(matrix2) if matrix2 is not None and np.size(matrix2) else None
+    Cf = _to_complex(final_matrix)  # base: contiene la diagonal (energías)
+
+    # Checks de tamaños globales
+    Nf = Cf.shape[0]
+    assert sum(Ptot) == Nf, f"Suma proyecciones finales {sum(Ptot)} != Nf {Nf}"
+    if C1 is not None:
+        assert sum(P1) == C1.shape[0], f"Suma P1 {sum(P1)} != N1 {C1.shape[0]}"
+    if C2 is not None:
+        assert sum(P2) == C2.shape[0], f"Suma P2 {sum(P2)} != N2 {C2.shape[0]}"
+
+    # Offsets por multiplicidad en la final:
+    off_fin = _cum_offsets(Ptot)
+    off1_fin = off_fin[:]                            # matrix1 empieza aquí dentro de cada mult
+    off2_fin = [off_fin[m] + P1[m] for m in range(L)]# matrix2 va detrás dentro de cada mult
+
+    # Offsets por multiplicidad en cada origen:
+    off1_src = _cum_offsets(P1)
+    off2_src = _cum_offsets(P2)
+
+    # Partimos de Cf para preservar energías
+    dest = Cf.copy()
+
+    def copy_all_blocks(Cs, P, off_src, off_dst):
+        """
+        Copia TODOS los subbloques de Cs (incluyendo entre multiplicidades)
+        a su posición en 'dest'. En bloques m==n, restaura su diagonal local.
+        """
+        if Cs is None:
+            return
+        for m in range(L):
+            rm = P[m]
+            if rm == 0: 
+                continue
+            rs = slice(off_src[m], off_src[m] + rm)
+            rd = slice(off_dst[m], off_dst[m] + rm)
+            for n in range(L):
+                cn = P[n]
+                if cn == 0:
+                    continue
+                cs = slice(off_src[n], off_src[n] + cn)
+                cd = slice(off_dst[n], off_dst[n] + cn)
+                block = Cs[rs, cs]
+                if m == n:
+                    keep = dest[rd, cd].copy()
+                    dest[rd, cd] = block
+                    k = min(rm, cn)
+                    idx = np.arange(k)
+                    dest[rd, cd][idx, idx] = keep[idx, idx]  # preserva la diagonal local
+                else:
+                    dest[rd, cd] = block
+
+    # Copiamos todo lo que haya en matrix1 y matrix2
+    copy_all_blocks(C1, P1, off1_src, off1_fin)
+    copy_all_blocks(C2, P2, off2_src, off2_fin)
+
+    # Asegurar la diagonal global (por si acaso)
+    np.fill_diagonal(dest, np.diag(Cf))
+
+    # Volvemos a (M x 2M) Re/Im intercalado
+    return _from_complex(dest)
