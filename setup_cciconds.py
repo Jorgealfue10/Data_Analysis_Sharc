@@ -72,7 +72,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
         dir_path = makedirs("./MRCI/",i)
         with open(dir_path / "input.inp", 'w') as f:
             f.write("***,MOLPRO input for Davidson Energies MRCI \n")
-            f.write("memory,300 \n")
+            f.write("memory,600 \n")
             f.write("nosym \nbohr \n")
 
             f.write("geometry={ \n")
@@ -82,12 +82,9 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
                 f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
             f.write("} \n \n")
 
-            f.write("gprint,orbitals,civectors; \n")
-            f.write("gthresh,thrprint=0.,printci=0.0000000500; \n \n")
-
             f.write(f"basis={basis} \n")
 
-            f.write("{hf \n wf,16,1,2 \n } \n")
+            f.write("{hf \n wf,17,1,1 \n } \n")
 
             f.write("{multi, \n")
             f.write("frozen," + str(frozen) + "\n closed, " + str(closed) + " \n occ, " + str(occ) + " \n")
@@ -157,9 +154,7 @@ def write_MRCC_input(geoms,stts,basis):
                     f.write(f"wf,{states[0]},1,{k} \n")
                     f.write("} \n \n")
 
-                    f.write("{mrcc,methos=ccsd(t),dir=mrccdir \n")
-                    f.write(f"wf,{states[0]},1,{k} \n state,{states[1]} \n")
-                    f.write("} \n")
+                    f.write("mrcc,method=ccsdt,dir=mrccdir \n")
                     f.write(f"ePH{k}=energy \n")
 
                     ePH_vars.append(f"ePH{k}")
@@ -167,16 +162,13 @@ def write_MRCC_input(geoms,stts,basis):
             f.write("table, " + ", ".join(ePH_vars) + "\n")
             f.write(f"save, energies.dat \n")
 
-
 data=read_file("initconds")
-geoms=get_geoms(data, 2, 50)
-for i in range(51):
+nicond=150
+nat=4
+geoms=get_geoms(data, nat, nicond)
+for i in range(nicond+1):
     print(geoms[:,i,:])
 
-sttsPH = [[16,0],[15,5],[16,1],[15,1]]
-sttsPH2 = [[16,0],5,1,1]
-sttsPH3 = [[16,0],5,1,1]
-
-basis="AVTZ"
-write_MRCI_input(geoms,0,5,10,sttsPH,basis)
-write_MRCC_input(geoms,sttsPH,basis)
+basis="AV5Z"
+write_MRCI_input(geoms,0,6,15,sttsPH2,basis)
+# write_MRCC_input(geoms,sttsPH2,basis)

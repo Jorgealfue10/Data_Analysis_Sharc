@@ -1,5 +1,6 @@
 import numpy as np
 from itertools import combinations
+from decimal import Decimal
 
 # Reads QM.out file and returns its content as a list of lines
 def read_qmout(file_path):
@@ -15,7 +16,7 @@ def getNstates(data):
             parts=line.split()
             stts=parts[1:]
             onlyonce=True
-            print(parts)
+            # print(parts)
 
     total_stts=0
     for i in range(len(stts)):
@@ -83,16 +84,12 @@ def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
     M = final_matrix.shape[0]  # Tamaño de la matriz final
     mapped_matrix = np.zeros((M, M), dtype=complex)
     
-    for i in range(matrix1.shape[0]):
-        for j in range(matrix1.shape[1]):
-            print("Matrix1",i,j,matrix1[i][j])
     # Mapping the values from the original matrices to the final matrix
     # The indexes are mapped taking into account the #proj per multiplicities
     sidx,sidx1,sidx2=0,0,0
     for i in range(len(total_stts)):
         if total_stts[i] == mult1[i]:
             for j in range(int(total_stts[i])*(i+1)):
-                # print(i,j,total_stts[i],mult1[i],mult2[i])
                 for k in range(int(total_stts[i])*(i+1)):
                     new_j,new_k=sidx+j,sidx+k
                     if new_j != new_k:
@@ -205,7 +202,10 @@ def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
 
         for i in range(final_mat.shape[0]):
             for j in range(final_mat.shape[1]):
-                file.write("{:18.12f} {:18.12f} ".format(final_mat[i,j].real,final_mat[i,j].imag))
+                cval_real = Decimal(final_mat[i,j].real)
+                cval_imag = Decimal(final_mat[i,j].imag)
+                print(cval_real,cval_imag)
+                file.write("{:6.5e} {:6.5e} ".format(cval_real,cval_imag))
             file.write("\n")
         
         file.write("\n")
@@ -408,12 +408,12 @@ def map_acoplamientos_general(
     # Alinear longitudes por si mult1/mult2 son más cortas:
     mult1 = list(mult1) + [0]*max(0, L - len(mult1))
     mult2 = list(mult2) + [0]*max(0, L - len(mult2))
-
+    print(total_stts, mult1, mult2)
     # Proyecciones por multiplicidad: P = (m_idx+1) * nº_estados
     Ptot = [(m+1)*total_stts[m] for m in range(L)]
     P1   = [(m+1)*mult1[m]      for m in range(L)]
     P2   = [(m+1)*mult2[m]      for m in range(L)]
-
+    print(Ptot, P1, P2)
     # Convertir a complejo (si la matriz existe)
     C1 = _to_complex(matrix1) if matrix1 is not None and np.size(matrix1) else None
     C2 = _to_complex(matrix2) if matrix2 is not None and np.size(matrix2) else None
@@ -421,6 +421,7 @@ def map_acoplamientos_general(
 
     # Checks de tamaños globales
     Nf = Cf.shape[0]
+    print(Nf,Ptot)
     assert sum(Ptot) == Nf, f"Suma proyecciones finales {sum(Ptot)} != Nf {Nf}"
     if C1 is not None:
         assert sum(P1) == C1.shape[0], f"Suma P1 {sum(P1)} != N1 {C1.shape[0]}"
