@@ -23,24 +23,30 @@ def geom1D_gen(nat,niconds,req,r0,rf):
 
     with open("initconds","w") as f:
         f.write(f"SHARC Initial Conditions File, version Jorge 2025\n")
-        f.write(f"Ninit \t {niconds}\n")
-        f.write(f"Natoms \t {nat}\n")
-        f.write(f"Reor \t None\n")
-        f.write(f"Temp \t 0.00000\n")
-        f.write(f"Eref \t 0.00000\n")
-        f.write(f"Eharm \t 0.00000\n")
+        f.write(f"Ninit {niconds}\n")
+        f.write(f"Natoms {nat}\n")
+        f.write(f"Reor None\n")
+        f.write(f"Temp 0.00000\n")
+        f.write(f"Eref 0.00000\n")
+        f.write(f"Eharm 0.00000\n")
 
         f.write(f"\n")
         
         eqposP = [0.00000000,0.00000000,0.00000000]
         eqposH1 = [0.00000000,0.00000000,req]
         
+        f.write(f"Equilibrium \n")
         for i in range(nat):
             element = "P" if i == 0 else "H"
             zval = 15.0 if i == 0 else 1.0
             mass = 30.97376199842 if i == 0 else 1.00784016
-            zeros = [0.00000000,0.00000000,0.00000000]
-            f.write(f"Atom \t {element} \t {zval} \t {eqposP} \t {mass} \t {zeros} \n")
+            zeros = 0.00000000
+            if i == 0:
+                x,y,z = eqposP
+                f.write(f"{element} {zval} {x:.6f} {y:.6f} {z:.6f} {mass} {zeros:6f} {zeros:6f} {zeros:6f} \n")
+            else:
+                x,y,z = eqposH1
+                f.write(f"{element} {zval} {x:.6f} {y:.6f} {z:.6f} {mass} {zeros:6f} {zeros:6f} {zeros:6f} \n")
 
         f.write(f"\n")
         f.write(f"\n")
@@ -50,21 +56,22 @@ def geom1D_gen(nat,niconds,req,r0,rf):
             posP = [0.00000000,0.00000000,0.00000000]
             posH1 = [0.00000000,0.00000000,rval]
 
-            f.write(f"Index \t {icond+1} \n")
+            f.write(f"Index {icond+1} \n")
             f.write(f"Atoms \n")
             for i in range(nat):
                 element = "P" if i == 0 else "H"
+                mass = 30.97376199842 if i == 0 else 1.00784016
                 x,y,z = posP if i == 0 else posH1
-                f.write(f" {element} {x:.8f} {y:.8f} {z:.8f} {mass} {zeros} \n")
+                f.write(f" {element} {x:.8f} {y:.8f} {z:.8f} {mass} {zeros:6f} {zeros:6f} {zeros:6f} \n")
             f.write(f"States \n")
-            f.write(f"Ekin \t 0.00000 \t a.u. \n")
-            f.write(f"Epot_harm \t 0.00000 \t a.u. \n")
-            f.write(f"Epot \t 0.00000 \t a.u. \n")
-            f.write(f"Etot_harm \t 0.00000 \t a.u. \n")
-            f.write(f"Etot \t 0.00000 \t a.u. \n")
+            f.write(f"Ekin 0.00000 a.u. \n")
+            f.write(f"Epot_harm 0.00000 a.u. \n")
+            f.write(f"Epot 0.00000 a.u. \n")
+            f.write(f"Etot_harm 0.00000 a.u. \n")
+            f.write(f"Etot 0.00000 a.u. \n")
         
-        f.write(f"\n")
-        f.write(f"\n")
+            f.write(f"\n")
+            f.write(f"\n")
 
 
 def get_geoms(data,nat,niconds):
