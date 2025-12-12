@@ -144,7 +144,7 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
 
             f.write(f"basis={basis} \n")
 
-            f.write("{hf \n wf,17,1,1 \n } \n")
+            f.write("{hf \n wf,16,1,1 \n } \n")
 
             f.write("{multi, \n")
             f.write("frozen," + str(frozen) + "\n closed, " + str(closed) + " \n occ, " + str(occ) + " \n")
@@ -179,58 +179,11 @@ def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
             f.write("table, " + ", ".join(ePHQ_vars) + "\n")
             f.write(f"save, energiesQ.dat \n")
 
-def write_MRCC_input(geoms,stts,basis):
-    """
-    Generates MRCC input files for each geometry configuration.
-
-    :param geoms: numpy array of shape (nat, niconds+1, 3) containing atomic coordinates for each geometry configuration.
-    :param stts: list of states, where each state is represented by a list containing the state information required for the MRCC input.
-    """
-
-    for i in range(geoms.shape[1]):
-        dir_path = makedirs("./MRCC/",i)
-        with open(dir_path / "input.inp", 'w') as f:
-            f.write("***,MOLPRO input for MRCC \n")
-            f.write("memory,300 \n")
-            f.write("nosym \nbohr \n")
-
-            f.write("geometry={ \n")
-            for j in range(geoms.shape[0]):
-                element = "P" if j == 0 else "H"
-                x,y,z = geoms[j,i]
-                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
-            f.write("} \n \n")
-
-            f.write("gprint,orbitals,civectors; \n")
-            f.write("gthresh,thrprint=0.,printci=0.0000000500; \n \n")
-
-            f.write(f"basis={basis} \n")
-
-            ePH_vars = []
-
-            for k, states in enumerate(stts):
-                if isinstance(states, list) and states[1] != 0:
-                    f.write("{hf \n")
-                    f.write(f"wf,{states[0]},1,{k} \n")
-                    f.write("} \n \n")
-
-                    f.write("mrcc,method=ccsdt,dir=mrccdir \n")
-                    f.write(f"ePH{k}=energy \n")
-
-                    ePH_vars.append(f"ePH{k}")
-
-            f.write("table, " + ", ".join(ePH_vars) + "\n")
-            f.write(f"save, energies.dat \n")
-
-# data=read_file("initconds")
+data=read_file("initconds")
 nicond=50
 nat=2
-geom1D_gen(nat,nicond,2.7000,1.5000,3.5000)
-
-# geoms=get_geoms(data, nat, nicond)
-# for i in range(nicond+1):
-#     print(geoms[:,i,:])
-
-# basis="AV5Z"
-# write_MRCI_input(geoms,0,6,15,sttsPH2,basis)
+geoms=get_geoms(data,nat,nicond)
+sttsPH=[[16,0],[15,5],[17,1],[15,1]]
+basis="AVTZ"
+write_MRCI_input(geoms,0,5,13,sttsPH,basis)
 # write_MRCC_input(geoms,sttsPH2,basis)

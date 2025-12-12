@@ -29,14 +29,14 @@ for i in range(1,niconds,1):
     indat=read_qmout(QMinfile)
 
     total_stts,stts=getNstates(outdat)
-    dyson=np.array(read_Dyson(outdat,total_stts))
+    dyson=read_Dyson(outdat,total_stts)
 
     for j in range(total_stts):
         row=dyson[j]
         for k in range(total_stts):
             re=row[2*k]
             im=row[2*k+1]
-            dyson_el[i]=re+1j*im
+            dyson_el[i][j][k]=re+1j*im
 
     nat,symbols,geoms=leer_geom(indat)
     for j in range(nat):
@@ -52,7 +52,10 @@ for p in range(total_stts):
         fname=f"./Dyson_Comp/dyson_{p+1:02d}_{q+1:02d}.dat"
         with open(fname,"w") as f:
             for idx in range(niconds):
+                if r_sorted[idx]==0.0:
+                    continue
                 R=r_sorted[idx]
                 D=dyson_sorted[idx,p,q]
                 Dnorm=np.sqrt(D.real*D.real+D.imag*D.imag)
                 f.write(f"{R:14.8f} {Dnorm:20.10f}\n")
+                # f.write(f"{R:14.8f} {D:20.10f}\n")
