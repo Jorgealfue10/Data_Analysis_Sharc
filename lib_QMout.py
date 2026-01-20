@@ -319,19 +319,18 @@ def write_NoSOC_NoDyson_QMout(data,stts,e_mat,tmx,tmy,tmz,dyson,file_out):
         file.write("! 2 Dipole Moment Matrices (3x"+str(len(tmx))+"x"+str(len(tmx))+", complex)\n")
 
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
-        for y in tmy:
-            y=list(y)
-            y[:]=[0]*len(y)
-            file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
+        for x in tmx:
+            x=list(x)
+            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
 
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
-        for x in tmx:
-            file.write(" ".join(f"{tx:.12f}" for tx in (list(x)))+"\n")
+        for y in tmy:
+            y=list(y)
+            file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
 
         file.write(str(len(tmx))+" "+str(len(tmx))+"\n")
         for z in tmz:
             z=list(z)
-            z[:]=[0]*len(z)
             file.write(" ".join(f"{tz:.12f}" for tz in (list(z)))+"\n")
 
         file.write("\n")
