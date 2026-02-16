@@ -117,68 +117,6 @@ def makedirs(path,icond):
     print(f"Directory created: {dir_path}" if os.path.exists(dir_path) else f"Directory already exists: {dir_path}")
     return dir_path
 
-def write_MRCI_input(geoms,frozen,closed,occ,stts,basis):
-    """
-    Escribe inputs de MRCI para todas las geometrías.
-
-    :param geoms: array (nat x nicond x 3) con coordenadas
-    :param frozen: núm. de orbitales congelados
-    :param closed: núm. de orbitales cerrados
-    :param occ: núm. de orbitales ocupados
-    :param stts: lista de estados [[electrones, estados], ...]
-    """
-
-    for i in range(geoms.shape[1]):
-        dir_path = makedirs("./MRCI/",i)
-        with open(dir_path / "input.inp", 'w') as f:
-            f.write("***,MOLPRO input for Davidson Energies MRCI \n")
-            f.write("memory,600 \n")
-            f.write("nosym \nbohr \n")
-
-            f.write("geometry={ \n")
-            for j in range(geoms.shape[0]):
-                element = "P" if j == 0 else "H"
-                x,y,z = geoms[j,i]
-                f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
-            f.write("} \n \n")
-
-            f.write(f"basis={basis} \n")
-
-            f.write("{hf \n wf,16,1,1 \n } \n")
-
-            f.write("{multi, \n")
-            f.write("frozen," + str(frozen) + "\n closed, " + str(closed) + " \n occ, " + str(occ) + " \n")
-            for i, states in enumerate(stts):
-                if isinstance(states, list) and states[1] != 0:
-                    f.write(f"wf,{states[0]},1,{i} \n state,{states[1]} \n")
-            f.write("} \n \n")
-
-            ePH_vars = []
-            ePHQ_vars = []
-
-            for k, states in enumerate(stts):
-                if isinstance(states, list) and states[1] != 0:
-                    f.write("{mrci \n")
-                    f.write("core,1 \n")
-                    f.write(f"wf,{states[0]},1,{k} \n state,{states[1]} \n")
-                    f.write("maxiter,250,1000 \n")
-                    f.write("} \n")
-                    if states[1] < 1:
-                        f.write(f"ePH{k}=energy \n")
-                        f.write(f"ePHQ{k}=energd \n")
-                    else:
-                        f.write(f"ePH{k}=energy(1) \n")
-                        f.write(f"ePHQ{k}=energd(1) \n")
-
-                    ePH_vars.append(f"ePH{k}")
-                    ePHQ_vars.append(f"ePHQ{k}")
-            
-            f.write("table, " + ", ".join(ePH_vars) + "\n")
-            f.write(f"save, energies.dat \n")
-
-            f.write("table, " + ", ".join(ePHQ_vars) + "\n")
-            f.write(f"save, energiesQ.dat \n")
-
 def orca_MRCI_input(geoms,nel,norb,stts,basis,chrge,multPC):
     """
     Escribe inputs de MRCI para todas las geometrías.
@@ -193,28 +131,30 @@ def orca_MRCI_input(geoms,nel,norb,stts,basis,chrge,multPC):
     for i in range(geoms.shape[1]):
         dir_path = makedirs("./",i)
         with open(dir_path / "input.inp", 'w') as f:
-            f.write("!HF " + basis + " NoSym \n")
+            f.write("!HF " + basis + " NoSym \n \n")
 
             f.write("%casscf \n")
             f.write("\t nel " + str(nel) + " \n")
             f.write("\t norb " + str(norb) + " \n")
-            f.write("end \n")
+            f.write("end \n \n")
             
             f.write("%mrci \n")
             f.write("\t CIType MRCI \n")
             f.write("\t DavidsonOpt Davidson1 \n")
             for i,nroots in enumerate(stts):
-                f.write("\t NewBlock "+str(i+1)+" 0\n")
-                f.write("\t \t NRoots "+str(nroots))
-                if i//2 == 0:
-                    f.write("\t \t Refs CAS(" + str(nel-1) + str(norb) + ") end \n")
-                else:
-                    f.write("\t \t Refs CAS(" + str(nel) + str(norb) + ") end \n")
-                f.write("\t end")
-            f.write("end \n")
+                if nroots != 0:
+                    f.write("\t NewBlock "+str(i+1)+" 0\n")
+                    f.write("\t \t NRoots "+str(nroots) + "\n")
+                    if i%2 == 0:
+                        f.write("\t \t Refs CAS(" + str(nel-1) + "," + str(norb) + ") end \n")
+                    else:
+                        f.write("\t \t Refs CAS(" + str(nel) + "," + str(norb) + ") end \n")
+                    f.write("\t end \n ")
+            f.write("end \n \n")
                 
-            f.write("* xyz "+ str(chrge) + str(multPC) + " \n")
+            f.write("* xyz "+ str(chrge) + " " + str(multPC) + " \n")
             for j in range(geoms.shape[0]):
+                print(i)
                 element = "P" if j == 0 else "C"
                 x,y,z = geoms[j,i]
                 f.write(f" {element} {x:.6f} {y:.6f} {z:.6f} \n")
