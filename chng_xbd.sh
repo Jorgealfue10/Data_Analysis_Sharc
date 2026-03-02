@@ -7,6 +7,7 @@ do
 	if [ -d $dir ] 
 	then
 		echo $dir
+		cp Dyval/$dir/QM.out $dir/DyQM.out 
 		cd $dir
 		cp ../dmbydy.py .
 		cp ../lib_QMout.py .

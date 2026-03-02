@@ -16,7 +16,6 @@ def getNstates(data):
             parts=line.split()
             stts=parts[1:]
             onlyonce=True
-            # print(parts)
 
     total_stts=0
     for i in range(len(stts)):
@@ -90,19 +89,26 @@ def map_acoplamientos(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
     for i in range(len(total_stts)):
         if total_stts[i] == mult1[i]:
             for j in range(int(total_stts[i])*(i+1)):
+                # print("j = ",j)
                 for k in range(int(total_stts[i])*(i+1)):
                     new_j,new_k=sidx+j,sidx+k
+                    # print("k = ",k, new_j,new_k,sidx1+j,sidx1+k)
                     if new_j != new_k:
                         mapped_matrix[new_j,new_k]=complex_matrix1[sidx1+j,sidx1+k]
+                        # print(complex_matrix1[sidx1+j,sidx1+k],sidx1+j,sidx1+k)
                     else:
                         mapped_matrix[new_j,new_k]=complex_finalmat[new_j,new_k]
             sidx1+=int(total_stts[i])*(i+1)
         elif total_stts[i] == mult2[i]:
+            # print(total_stts[i])
             for j in range(int(total_stts[i])*(i+1)):
+                # print("j = ",j)
                 for k in range(int(total_stts[i])*(i+1)):
                     new_j,new_k=sidx+j,sidx+k
+                    # print("kA = ",k, new_j,new_k)
                     if new_j != new_k:
                         mapped_matrix[new_j,new_k]=complex_matrix2[sidx2+j,sidx2+k]
+                        # print(complex_matrix2[sidx2+j,sidx2+k],sidx2+j,sidx2+k)
                     else:
                         mapped_matrix[new_j,new_k]=complex_finalmat[new_j,new_k]
             sidx2+=int(total_stts[i])*(i+1)
@@ -204,22 +210,21 @@ def write_output(PHPHM_stts_num,final_mat,dyson_mat,tmx,tmy,tmz,outfile):
             for j in range(final_mat.shape[1]):
                 cval_real = Decimal(final_mat[i,j].real)
                 cval_imag = Decimal(final_mat[i,j].imag)
-                print(cval_real,cval_imag)
                 file.write("{:6.5e} {:6.5e} ".format(cval_real,cval_imag))
             file.write("\n")
         
         file.write("\n")
         file.write("! 2 Dipole Moment Matrices (3x{}x{}, complex)\n".format(final_mat.shape[0], final_mat.shape[0]))
-        file.write("{} {}\n".format(final_mat.shape[0], final_mat.shape[0]))
-
-        for d in dyson_mat[:]:
-            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
 
         file.write("{} {}\n".format(final_mat.shape[0], final_mat.shape[0]))
         for y in tmy:
             y=list(y)
             y[:]=[0]*len(y)
             file.write(" ".join(f"{ty:.12f}" for ty in (list(y)))+"\n")
+
+        file.write("{} {}\n".format(final_mat.shape[0], final_mat.shape[0]))
+        for d in dyson_mat[:]:
+            file.write(" ".join(f"{dy:.12f}" for dy in (list(d)))+"\n")
         
         file.write("{} {}\n".format(final_mat.shape[0], final_mat.shape[0]))
         for z in tmz:
@@ -390,90 +395,108 @@ def _cum_offsets(lengths: list[int]) -> list[int]:
     return offs
 
 # Generalized mapping of coupling matrices into a final matrix, preserving diagonals
-def map_acoplamientos_general(
-    matrix1: np.ndarray,       # (N1 x 2N1) Re/Im intercalado
-    matrix2: np.ndarray,       # (N2 x 2N2) Re/Im intercalado
-    mult1: list[int],          # nº de ESTADOS por multiplicidad en matrix1 (sin MS)
-    mult2: list[int],          # nº de ESTADOS por multiplicidad en matrix2 (sin MS)
-    total_stts: list[int],     # nº TOTAL de ESTADOS por multiplicidad en la final (sin MS)
-    final_matrix: np.ndarray   # (M x 2M) con energías en la diagonal (Re/Im intercalado)
-) -> np.ndarray:
-    """
-    Mapea TODOS los acoplamientos (no diagonales) que ya están dentro de matrix1 y matrix2
-    a la matriz final común, respetando multiplicidades y proyecciones MS, y preservando
-    la diagonal (energías) de final_matrix.
-    """
-    L = len(total_stts)  # nº de multiplicidades (S=0, 1/2, 1, ...)
-    # Alinear longitudes por si mult1/mult2 son más cortas:
-    mult1 = list(mult1) + [0]*max(0, L - len(mult1))
-    mult2 = list(mult2) + [0]*max(0, L - len(mult2))
-    print(total_stts, mult1, mult2)
-    # Proyecciones por multiplicidad: P = (m_idx+1) * nº_estados
-    Ptot = [(m+1)*total_stts[m] for m in range(L)]
-    P1   = [(m+1)*mult1[m]      for m in range(L)]
-    P2   = [(m+1)*mult2[m]      for m in range(L)]
-    print(Ptot, P1, P2)
-    # Convertir a complejo (si la matriz existe)
-    C1 = _to_complex(matrix1) if matrix1 is not None and np.size(matrix1) else None
-    C2 = _to_complex(matrix2) if matrix2 is not None and np.size(matrix2) else None
-    Cf = _to_complex(final_matrix)  # base: contiene la diagonal (energías)
 
-    # Checks de tamaños globales
-    Nf = Cf.shape[0]
-    print(Nf,Ptot)
-    assert sum(Ptot) == Nf, f"Suma proyecciones finales {sum(Ptot)} != Nf {Nf}"
-    if C1 is not None:
-        assert sum(P1) == C1.shape[0], f"Suma P1 {sum(P1)} != N1 {C1.shape[0]}"
-    if C2 is not None:
-        assert sum(P2) == C2.shape[0], f"Suma P2 {sum(P2)} != N2 {C2.shape[0]}"
+import numpy as np
 
-    # Offsets por multiplicidad en la final:
-    off_fin = _cum_offsets(Ptot)
-    off1_fin = off_fin[:]                            # matrix1 empieza aquí dentro de cada mult
-    off2_fin = [off_fin[m] + P1[m] for m in range(L)]# matrix2 va detrás dentro de cada mult
+def map_acoplamientos_v2(matrix1, matrix2, mult1, mult2, total_stts, final_matrix):
 
-    # Offsets por multiplicidad en cada origen:
-    off1_src = _cum_offsets(P1)
-    off2_src = _cum_offsets(P2)
+    matrix1 = np.array(matrix1)
+    matrix2 = np.array(matrix2)
+    final_matrix = np.array(final_matrix)
 
-    # Partimos de Cf para preservar energías
-    dest = Cf.copy()
+    def convertir_a_compleja(matrix):
+        return matrix[:, ::2] + 1j * matrix[:, 1::2]
 
-    def copy_all_blocks(Cs, P, off_src, off_dst):
-        """
-        Copia TODOS los subbloques de Cs (incluyendo entre multiplicidades)
-        a su posición en 'dest'. En bloques m==n, restaura su diagonal local.
-        """
-        if Cs is None:
-            return
-        for m in range(L):
-            rm = P[m]
-            if rm == 0: 
+    complex_matrix1 = convertir_a_compleja(matrix1)
+    complex_matrix2 = convertir_a_compleja(matrix2)
+    complex_finalmat = convertir_a_compleja(final_matrix)
+
+    M = complex_finalmat.shape[0]
+    mapped_matrix = np.array(complex_finalmat, copy=True)
+
+    # índices acumulados
+    sidx  = 0
+    sidx1 = 0
+    sidx2 = 0
+
+    # Construimos offsets por multiplicidad
+    offsets_final = []
+    offsets_1 = []
+    offsets_2 = []
+
+    tmp_f = tmp_1 = tmp_2 = 0
+
+    for i in range(len(total_stts)):
+
+        mult = i + 1
+
+        size_f = int(total_stts[i]) * mult
+        size_1 = int(mult1[i]) * mult if i < len(mult1) else 0
+        size_2 = int(mult2[i]) * mult if i < len(mult2) else 0
+
+        offsets_final.append((tmp_f, size_f))
+        offsets_1.append((tmp_1, size_1))
+        offsets_2.append((tmp_2, size_2))
+
+        tmp_f += size_f
+        tmp_1 += size_1
+        tmp_2 += size_2
+
+    # -------------------------
+    # MATRIX1 (ej PH+)
+    # -------------------------
+    for a in range(len(total_stts)):
+        start_f_a, size_f_a = offsets_final[a]
+        start_1_a, size_1_a = offsets_1[a]
+
+        if size_1_a == 0:
+            continue
+
+        for b in range(len(total_stts)):
+            start_f_b, size_f_b = offsets_final[b]
+            start_1_b, size_1_b = offsets_1[b]
+
+            if size_1_b == 0:
                 continue
-            rs = slice(off_src[m], off_src[m] + rm)
-            rd = slice(off_dst[m], off_dst[m] + rm)
-            for n in range(L):
-                cn = P[n]
-                if cn == 0:
-                    continue
-                cs = slice(off_src[n], off_src[n] + cn)
-                cd = slice(off_dst[n], off_dst[n] + cn)
-                block = Cs[rs, cs]
-                if m == n:
-                    keep = dest[rd, cd].copy()
-                    dest[rd, cd] = block
-                    k = min(rm, cn)
-                    idx = np.arange(k)
-                    dest[rd, cd][idx, idx] = keep[idx, idx]  # preserva la diagonal local
-                else:
-                    dest[rd, cd] = block
 
-    # Copiamos todo lo que haya en matrix1 y matrix2
-    copy_all_blocks(C1, P1, off1_src, off1_fin)
-    copy_all_blocks(C2, P2, off2_src, off2_fin)
+            for i in range(size_1_a):
+                for j in range(size_1_b):
+                    if start_f_a+i == start_f_b+j:
+                        mapped_matrix[start_f_a+i, start_f_b+j] = \
+                            complex_finalmat[start_f_a+i, start_f_b+j]
+                        print(start_f_a+i, start_f_b+j,start_1_a+i, start_1_b+j)
+                    else:
+                        mapped_matrix[start_f_a+i, start_f_b+j] = \
+                            complex_matrix1[start_1_a+i, start_1_b+j]
+                        print(start_f_a+i, start_f_b+j,start_1_a+i, start_1_b+j)
+                        
 
-    # Asegurar la diagonal global (por si acaso)
-    np.fill_diagonal(dest, np.diag(Cf))
+    # -------------------------
+    # MATRIX2 (ej PH)
+    # -------------------------
+    for a in range(len(total_stts)):
+        start_f_a, size_f_a = offsets_final[a]
+        start_2_a, size_2_a = offsets_2[a]
 
-    # Volvemos a (M x 2M) Re/Im intercalado
-    return _from_complex(dest)
+        if size_2_a == 0:
+            continue
+
+        for b in range(len(total_stts)):
+            start_f_b, size_f_b = offsets_final[b]
+            start_2_b, size_2_b = offsets_2[b]
+
+            if size_2_b == 0:
+                continue
+
+            for i in range(size_2_a):
+                for j in range(size_2_b):
+                    if start_f_a+i == start_f_b+j:
+                        mapped_matrix[start_f_a+i, start_f_b+j] = \
+                            complex_finalmat[start_f_a+i, start_f_b+j]
+                        print(start_f_a+i, start_f_b+j,start_2_a+i, start_2_b+j)
+                    else:
+                        mapped_matrix[start_f_a+i, start_f_b+j] = \
+                            complex_matrix2[start_2_a+i, start_2_b+j]
+                        print(start_f_a+i, start_f_b+j,start_2_a+i, start_2_b+j)
+
+    return mapped_matrix

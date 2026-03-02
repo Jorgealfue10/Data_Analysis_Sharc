@@ -1,7 +1,7 @@
 import numpy as np
 from lib_QMout import *
 
-eq_values = np.loadtxt("./energiesq.dat")
+eq_values = np.loadtxt("./energiesq_mix.dat")
 file_path = "./QM.out"
 data = read_qmout(file_path)
 total_stts, stts = getNstates(data)
