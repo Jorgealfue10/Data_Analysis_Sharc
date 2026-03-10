@@ -21,18 +21,21 @@ def convolve_spectrum(evals,relInt,dE,sigma_eV,emin=None,emax=None,normalize=Fal
 
     sigma_bins = sigma_eV / dE
     bins = np.append(E_grid, E_grid[-1] + dE)
-    spectrum, _ = np.histogram(
-        energies, 
-        bins=bins, 
-        weights=intensities
-    )
+
+    # spectrum, _ = np.histogram(
+    #     energies, 
+    #     bins=bins, 
+    #     weights=intensities
+    # )
+
     kernel = Gaussian1DKernel(sigma_bins)
     spectrum_conv = convolve(spectrum, kernel, normalize_kernel=True, boundary='extend')
 
     if normalize:
         spectrum_conv = spectrum_conv / np.max(spectrum_conv)
+        spectrum = spectrum / np.max(spectrum)
 
-    return E_grid, spectrum_conv
+    return E_grid, spectrum, spectrum_conv
 
 def main():
     parser = argparse.ArgumentParser(
@@ -60,9 +63,9 @@ def main():
 
     data = np.loadtxt(fileinp, skiprows=1)
     evals, relInt = data[:,-2], data[:,-1]
-    E_grid, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
+    E_grid, spectrum, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
 
-    np.savetxt(fileout, np.column_stack((E_grid, spectrum_conv)))
+    np.savetxt(fileout, np.column_stack((E_grid, spectrum, spectrum_conv)))
 
 
 if __name__ == '__main__':

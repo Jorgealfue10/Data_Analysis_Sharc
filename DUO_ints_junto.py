@@ -2,7 +2,9 @@ import numpy as np
 import os ; import re
 from pathlib import Path
 import math ; from collections import defaultdict
-import argparse
+from scipy.interpolate import CubicSpline
+import argparse ; import sys
+from tqdm import tqdm
 
 #-------------------------------------------------------------------------------#
 # EXTRAER AUTOFUNCIONES VIBRACIONALES
@@ -174,14 +176,11 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
 
         parts = line.split()
         vibn = int(parts[4])
-        jn = int(round(float(parts[0])))
+        jn = int(np.floor(float(parts[0])))
 
         #Getting indexes for J projections
         mval = float(parts[8])
-        if mval % 1 != 0 and nLambda != 0:
-            midx = int(round(mval+S+1))
-        else:
-            midx = int(round(mval+S))
+        midx = int(np.floor(mval+S))
 
         if nLambda == 0:
             nL = 0
@@ -190,7 +189,7 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
                 nL = 0
             else:
                 nL = 1
-        nS = int(round(float(parts[7])+S))
+        nS = int(np.floor(float(parts[7])+S))
 
         pm = parts[9]
         if pm == '-':
@@ -199,10 +198,12 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
             p = 0
         
         if vibn < nvib:
+            # print(line)
             # print(i,vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p)
             Jvals[vibn,jn,midx] = float(parts[2])
-            index_list[vibn,jn,midx,:] = vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [0] Vib, [1] J, [2] m, [3] S, [4] Lambda, [5] Parity, [6] Index
+            index_list[vibn,jn,midx,:] = vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [0] Vib, [1] J, [2] m, [3] Sigma, [4] Lambda, [5] Parity, [6] Index
             key_dict[vibn,jn,midx,:] = float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [1] J, [2] m, [3] S, [4] Lambda, [5] Parity, [6] Index
+            # print(key_dict[vibn,jn,midx,:],index_list[vibn,jn,midx,:])
 
     return Jvals,nOmega,index_list,key_dict
 
@@ -224,7 +225,6 @@ def fact(n):
     if n%1 == 0:
         n=int(n)
     else:
-        print(n)
         return 0
     for i in range(n):
         f=f*(i+1)
@@ -334,11 +334,11 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
     djlist = []
     initdj = -DJ
     for i in range(int(initdj+DJ),int(DJ+DJ)+1,1):
-        djval = i -DJ
+        djval = i - DJ
         djlist.append(djval)
-    
-    print(djlist)
 
+    print(djlist)
+    
     for i in range(numvibPH):
         for j in range(numvibPHM):
 
@@ -351,13 +351,12 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
 
                         PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
                         evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
-                        vval=indexPH[i,k,m,0]
                         degvi = (np.exp(-evib/(3.166811563*10**(-6)*Tvib)))/normPHvib
                         PHv += PHsttsE
 
                         PHsumOmega = (PHener[i,k,m]+ZPEPH)/Eh_to_cm
                         eboltz = PHsumOmega - ((np.min(PHener[i,:,:]) + ZPEPH)/Eh_to_cm)
-                        Jival=indexPH[i,k,m,1]
+                        Jival=indexPH[i,k,m,1] ; OmN = indexPH[i,k,m,2]
                         degJi = ((2*Jival+1)*np.exp(-eboltz/(3.166811563*10**(-6)*Trot)))/normPHrot[i]
                         PHsumOmega += PHsttsE
 
@@ -371,13 +370,109 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
 
                             diff = abs(PHsumOmega - PHMsumOmega)
 
-                            Jfval=indexPHM[j,l,n,1]
-
-                            djval = Jfval - Jival
+                            Jfval=indexPHM[j,l,n,1] ; OmC = indexPHM[j,l,n,2]
+                            
                             rotcoeff = 0.0
-                            for dj in djlist:
-                                rotcoeff += W3_exp(Jfval,DJ,Jival,indexPHM[j,l,n,2],dj,indexPH[i,k,m,2])
-                            relInt[i,j,k,l,m,n] = degvi*degJi*((rotcoeff)*abs(bk_val))**2
+                            for djJ in djlist:
+                                if not (abs(Jival-Jfval) <= djJ <= (Jival+Jfval)):
+                                    continue
+                                if not np.isclose((Jival + Jfval + djJ) % 1, 0):
+                                    continue
+                                for djom in djlist:
+                                    if -djJ <= djom and djom <= djJ:
+                                        if not abs(OmN + OmC - djom) < 1e-10:
+                                            continue
+                                        # rotcoeff += W3_exp(Jival,DJ,Jfval,indexPH[i,k,m,2],djom,indexPHM[j,l,n,2])
+                                        rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
+                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
+                            evals[i,j,k,l,m,n] = diff
+    return evals,relInt
+
+#-------------------------------------------------------------------------------#
+#Make intensity matrix including Dyson splines as a function of sigma combs
+#-------------------------------------------------------------------------------#
+
+def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
+                ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ:int,
+                numvibPH:int,numvibPHM:int,numJPH:int,numJPHM:int,
+                numOmPH:int,numOmPHM:int,indexPH,indexPHM,
+                keyPH,keyPHM,coefPH,coefPHM):
+
+    """
+    Make the intensity matrix
+    """
+    Eh_to_cm = 219474.6
+
+    # dyspline = dyspline[mask] ; dyspline = dyspline[:,mask]
+    relInt = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
+    evals = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
+
+    normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+    normPHrot = rot_normf(Trot,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+
+    djlist = []
+    initdj = -DJ
+    for i in range(int(initdj+DJ),int(DJ+DJ)+1,1):
+        djval = i - DJ
+        djlist.append(djval)
+
+    print(djlist)
+    
+    for i in tqdm(range(numvibPH),desc='Progreso vPH'):
+        for j in tqdm(range(numvibPHM),desc='Progreso vPHM',leave=False):
+
+            PHvibsvn = PHvibs[:,i] ; PHvibsvn = PHvibsvn[mask]
+            PHMvibsvn = PHMvibs[:,j] ; PHMvibsvn = PHMvibsvn[mask]
+
+            for k in range(numJPH):
+                for l in range(numJPHM):
+                    for m in range(numOmPH):
+
+                        PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
+                        evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
+                        degvi = (np.exp(-evib/(3.166811563*10**(-6)*Tvib)))/normPHvib
+                        PHv += PHsttsE
+
+                        PHsumOmega = (PHener[i,k,m]+ZPEPH)/Eh_to_cm
+                        eboltz = PHsumOmega - ((np.min(PHener[i,:,:]) + ZPEPH)/Eh_to_cm)
+                        Jival=indexPH[i,k,m,1] ; OmN = indexPH[i,k,m,2]
+                        degJi = ((2*Jival+1)*np.exp(-eboltz/(3.166811563*10**(-6)*Trot)))/normPHrot[i]
+                        PHsumOmega += PHsttsE
+
+                        for n in range(numOmPHM):
+
+                            keyPH_i = tuple(np.array(keyPH[i,k,m,:])) ; keyPHM_j = tuple(np.array(keyPHM[j,l,n,:]))
+                            
+                            keydyson = (keyPH[i,k,m,2],keyPHM[j,l,n,2])
+                            if keydyson not in dyspline.keys():
+                                # print("WOWOWOW")
+                                continue
+                            
+                            dyspl = dyspline[keydyson](rvals)
+                            dysmat = np.diag(dyspl)
+
+                            bk_val = bk_Coeff(PHvibsvn,PHMvibsvn,dysmat,coefPH[keyPH_i],coefPHM[keyPHM_j])
+
+                            PHMsumOmega = ((PHMener[j,l,n])+ZPEPHM)/Eh_to_cm
+                            PHMsumOmega += PHMsttsE
+
+                            diff = abs(PHsumOmega - PHMsumOmega)
+
+                            Jfval=indexPHM[j,l,n,1] ; OmC = indexPHM[j,l,n,2]
+                            
+                            rotcoeff = 0.0
+                            for djJ in djlist:
+                                if not (abs(Jival-Jfval) <= djJ <= (Jival+Jfval)):
+                                    continue
+                                if not np.isclose((Jival + Jfval + djJ) % 1, 0):
+                                    continue
+                                for djom in djlist:
+                                    if -djJ <= djom and djom <= djJ:
+                                        if not abs(OmN + OmC - djom) < 1e-10:
+                                            continue    
+                                        # rotcoeff += W3_exp(Jival,DJ,Jfval,indexPH[i,k,m,2],djom,indexPHM[j,l,n,2])
+                                        rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
+                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
     return evals,relInt
 
@@ -406,8 +501,7 @@ def dump_spectrum_long(filename, evals, relInt, index_listPH, index_listPHM,
     Eh_to_eV = 27.2114 ; Eh_to_cm = 219474.63
 
     with open(filename, "w") as f:
-        f.write(f"# columns: vPH JPH OmPH vPHM JPHM OmPHM  E({energy_unit})  I  \n")
-
+        f.write(f"# columns: PH PHM E({energy_unit})  I  \n")
         maxval = np.max(relInt[:,:,:,:,:,:])
         for i in range(nvPH):
             for j in range(nvPHM):
@@ -438,6 +532,36 @@ def dump_spectrum_long(filename, evals, relInt, index_listPH, index_listPHM,
                                 f.write(f"{E: .10f} {I: .10f} \n")
 
 #-------------------------------------------------------------------------------#
+#Read Dyson values by sigma combination
+#-------------------------------------------------------------------------------#
+
+def read_dys_bySigma(d1,d2,pathtody):
+
+    sigma_dyson = defaultdict(lambda:None)
+    for i in d1:
+        for j in d2:
+            sigma_i = d1[i]
+            sigma_j = d2[j]
+
+            key = (sigma_i,sigma_j)
+            r,dyson = np.loadtxt(pathtody+f"/dyson_{i:02d}_{j:02d}.dat",unpack=True)
+
+            if sigma_dyson[key] is None:
+                sigma_dyson[key] = dyson.copy()
+                # print("First time")
+            else:
+                # print("Not first time")
+                sigma_dyson[key] += dyson
+
+    sigma_splines = {}
+    r = r*0.529177
+    for key, dyson in sigma_dyson.items():
+        sigma_splines[key] = CubicSpline(r, dyson)
+
+    return sigma_splines
+
+
+#-------------------------------------------------------------------------------#
 #Main
 #-------------------------------------------------------------------------------#
 def main():
@@ -449,7 +573,7 @@ def main():
     parser.add_argument("-ZPE", type=float, nargs=2, help="ZPE vibracional Sistema Neutro y catiónico (cm^-1)")
     parser.add_argument("-Etot", type=float, nargs=2, help="Energía total Sistema Neutro y Catiónico (Eh)")
     parser.add_argument("-nVJtot", type=int, nargs=2, help="Número de vibracionales y J totales Sistema Neutro y Catiónico")
-    parser.add_argument("-DJ", type=float, default=1.5, help="DJ abs value")
+    parser.add_argument("-DJ", type=float, nargs="+", help="DJ abs value")
 
     parser.add_argument("-Nvib", "--numvib", type=int, nargs=2, help="Número de vibracionales sistema neutro y catiónico")
     parser.add_argument("-NJ", "--numJ", type=int, nargs=2,help="Número de J sistema neutroy y catiónico")
@@ -462,7 +586,10 @@ def main():
     parser.add_argument("-p", "--path", type=str, help="Ruta del directorio global")
     parser.add_argument("-dsys", type=str, nargs=2, help="Sistema Neutro y Catiónico")
 
-    parser.add_argument("-o", "--output", type=str, default=None, help="Ruta del archivo de salida")
+    parser.add_argument("-dypath", "--pathtody", type=str, default=None, help="Ruta del directorio de dyson")
+    parser.add_argument("-stts", "--states", nargs=2, type=str, help="Estados a calcular")
+
+    # parser.add_argument("-o", "--output", type=str, default=None, help="Ruta del archivo de salida")
 
     args = parser.parse_args()
 
@@ -470,40 +597,108 @@ def main():
     nVib_tot, nJ_tot = args.nVJtot
     ZPEn = args.ZPE[0] ; ZPEc = args.ZPE[1]
     Etotn = args.Etot[0] ; Etotc = args.Etot[1]
-    DJval = args.DJ
+    DJvals = args.DJ
     numvibn = args.numvib[0] ; numvibc = args.numvib[1]
     numJn = args.numJ[0] ; numJc = args.numJ[1]
     multn = args.mult[0] ; multc = args.mult[1]
     Lvaln = args.Lval[0] ; Lvalc = args.Lval[1]
 
-    pathor = args.path
+    pathor = args.path ; pathtody = args.pathtody
     dsysn = args.dsys[0] ; dsysc = args.dsys[1]
+    sttN = args.states[0] ; sttC = args.states[1]
 
     maskRi,maskRf = args.maskR
     npnts = args.npts
 
-    fileout = args.output
+    # fileout = args.output
+
+    print("----------------------------------------------------------------")
+    print("Reading vibrational eigenfunction ")
 
     vibsn = parse_duo_vib_einfun(pathor+dsysn+"vibeigenvect_vib.chk", npnts, nVib_tot)
     vibsc = parse_duo_vib_einfun(pathor+dsysc+"vibeigenvect_vib.chk", npnts, nVib_tot)
 
+    print("Reading rovibrational energies ")
+
     Jenern, nOmn, indexlsn, keysn = getJvals_compInd(pathor+dsysn+"rovibronic_energies.dat", nVib_tot, nJ_tot, multn, Lvaln)
     Jenerc, nOmc, indexlsc, keysc = getJvals_compInd(pathor+dsysc+"rovibronic_energies.dat", nVib_tot, nJ_tot, multc, Lvalc)
+
+    print("Reading rotational coefficients ")
 
     coefn = read_coeff(pathor+dsysn+"vibeigenvect_vectors.chk")
     coefc = read_coeff(pathor+dsysc+"vibeigenvect_vectors.chk")
 
+    print("Reading Dyson Norms ")
+
+    dictdyson = {
+        "PHX3Sm": {
+            12: -1,
+            13: 0,
+            14: 1
+        },
+        "PHa1D": {
+            1: 0
+        },
+        "PHMX2P": {
+            2: -0.5,
+            3: -0.5,
+            7: 0.5,
+            8: 0.5
+        },
+        "PHMa4Sm": {
+            15: -1.5,
+            16: -0.5,
+            17: 0.5,
+            18: 1.5
+        },
+        "PHMA2D": {
+            5: -0.5,
+            6: -0.5,
+            10: 0.5,
+            11: 0.5
+        },
+        "PHM12Sm": {
+            4: -0.5,
+            9: 0.5
+        }
+    }
+
+    if sttN not in dictdyson.keys():
+        print("State not found")
+        sys.exit()
+
+    if sttC not in dictdyson.keys():
+        print("State not found")
+        sys.exit()
+
     rvals_Comp,dysmat = dyson_mat(pathor+"Dipole_moment_functions.dat")
+    dyson_splines = read_dys_bySigma(dictdyson[sttN],dictdyson[sttC],pathtody)
 
     mask = (rvals_Comp > maskRi) & (rvals_Comp < maskRf)
+    rvals_Comp = rvals_Comp[mask]
 
-    evals,relInt = intT_sep(Jenern,Jenerc,dysmat,vibsn,vibsc,mask,Tvib,Trot,
-                            ZPEn,ZPEc,Etotn,Etotc,DJval,
-                            numvibn,numvibc,numJn,numJc,nOmn,nOmc,
-                            indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+    print("Calculating intensities")
 
-    dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+fileout+".dat",
-                        evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+    if len(DJvals) > 1:
+        for DJval in DJvals:
+            print("DJ = ",DJval)
+            evals,relInt = intT_sigma(Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                                ZPEn,ZPEc,Etotn,Etotc,DJval,
+                                numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                                indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+
+            dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
+                                evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+        print("----------------------------------------------------------------")
+    else:
+        evals,relInt = intT_sigma(Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                    ZPEn,ZPEc,Etotn,Etotc,DJval,
+                    numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                    indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+
+        dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
+                            evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+        print("----------------------------------------------------------------")
 
 if __name__ == "__main__":
     main()
