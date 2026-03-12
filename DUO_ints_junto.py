@@ -289,9 +289,10 @@ def read_coeff(filename):
         for line in f:
             parts = line.split()
 
-            if (parts[0]).isnumeric() == False: 
+            if (parts[1]).isnumeric() == False: 
                 continue
             else:
+                # print(parts)
                 vib = int(parts[5])
                 J = float(parts[1])
                 Om = float(parts[9])
@@ -339,13 +340,13 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
 
     print(djlist)
     
-    for i in range(numvibPH):
+    for i in (tqdm(range(numvibPH),desc='Progreso vPH')):
         for j in range(numvibPHM):
 
             PHvibsvn = PHvibs[:,i] ; PHvibsvn = PHvibsvn[mask]
             PHMvibsvn = PHMvibs[:,j] ; PHMvibsvn = PHMvibsvn[mask]
 
-            for k in range(numJPH):
+            for k in (tqdm(range(numJPH),desc='Progreso JPH',leave=False)):
                 for l in range(numJPHM):
                     for m in range(numOmPH):
 
@@ -486,7 +487,7 @@ def dump_spectrum_long(filename, evals, relInt, index_listPH, index_listPHM,
     Guarda (E, I) + índices cuánticos discretos en formato long.
 
     Columns:
-    vPH vPHM JPH JPHM OmPH OmPHM  E(unit)  I  idxPH  idxPHM
+    vPH vPHM JPH JPHM OmPH OmPHM  E(unit)  I 
     """
 
     # Comprueba shapes básicas
@@ -511,7 +512,7 @@ def dump_spectrum_long(filename, evals, relInt, index_listPH, index_listPHM,
                             for n in range(nOmPHM):
 
                                 I = relInt[i,j,k,l,m,n]#/maxval
-                                if tol_I > 0.0 and abs(I) <= tol_I:
+                                if I <= tol_I:
                                     continue
 
                                 E = evals[i,j,k,l,m,n]
@@ -547,15 +548,16 @@ def read_dys_bySigma(d1,d2,pathtody):
             r,dyson = np.loadtxt(pathtody+f"/dyson_{i:02d}_{j:02d}.dat",unpack=True)
 
             if sigma_dyson[key] is None:
-                sigma_dyson[key] = dyson.copy()
+                sigma_dyson[key] = (dyson.copy())**2
                 # print("First time")
             else:
                 # print("Not first time")
-                sigma_dyson[key] += dyson
+                sigma_dyson[key] += dyson**2
 
     sigma_splines = {}
     r = r*0.529177
     for key, dyson in sigma_dyson.items():
+        dyson = np.sqrt(dyson)
         sigma_splines[key] = CubicSpline(r, dyson)
 
     return sigma_splines
@@ -686,6 +688,10 @@ def main():
                                 ZPEn,ZPEc,Etotn,Etotc,DJval,
                                 numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                                 indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+            # evals,relInt = intT_sep(Jenern,Jenerc,dysmat,vibsn,vibsc,mask,Tvib,Trot,
+            #                     ZPEn,ZPEc,Etotn,Etotc,DJval,
+            #                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+            #                     indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
             dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
                                 evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
@@ -703,3 +709,8 @@ def main():
 if __name__ == "__main__":
     main()
 
+#-3.412226855832E+002
+#-3.415926466813E+002
+#
+#
+#
