@@ -160,8 +160,6 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
     lines = f.readlines()
 
     S=(mult-1)/2
-    nSigma = mult
-    parity = 2
     jn = 0
     for i,line in enumerate(lines):
         if i == 0:
@@ -169,7 +167,6 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
                 nOmega = mult
             else:
                 nOmega = (nLambda+1) * mult
-            nLind = nLambda + 1 
             Jvals = np.zeros((nvib,nj,nOmega))
             index_list = np.zeros((nvib,nj,nOmega,7))
             key_dict = np.zeros((nvib,nj,nOmega,6))
@@ -181,15 +178,6 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
         #Getting indexes for J projections
         mval = float(parts[8])
         midx = int(np.floor(mval+S))
-
-        if nLambda == 0:
-            nL = 0
-        else:
-            if float(parts[5]) == -nLambda:
-                nL = 0
-            else:
-                nL = 1
-        nS = int(np.floor(float(parts[7])+S))
 
         pm = parts[9]
         if pm == '-':
