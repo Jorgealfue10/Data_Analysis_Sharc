@@ -88,6 +88,57 @@ def spectrum_lorentzian(evals, relInt, dE, gamma, emin=None, emax=None, normaliz
 
     return E_grid, spectrum, lorentzians
 
+def gaussian(E, E0, sigma, I):
+    check = False
+    for i in range(len(E)):
+        if abs(E[i] - E0) < 1e-4 and check == False:
+            E[i] = E0
+            check = True
+    return I * np.exp(-((E - E0)**2) / (2 * sigma**2))
+
+def spectrum_gaussian(evals, relInt, dE, sigma, emin=None, emax=None, normalize=False):
+
+    energies = evals.flatten()
+    intensities = relInt.flatten()
+
+    if emin is None:
+        emin = np.min(energies)
+
+    if emax is None:
+        emax = np.max(energies)
+
+    # grilla de energía
+    E_grid = np.arange(emin, emax, dE)
+
+    # guardar cada lorentziana
+    gaussians = []
+
+    for Ek, Ik in zip(energies, intensities):
+
+        G = gaussian(E_grid, Ek, sigma, Ik)
+        gaussians.append(G)
+
+    gaussians = np.array(gaussians)
+
+    # sumar todas
+    spectrum = np.sum(gaussians, axis=0)
+
+    if normalize:
+        spectrum /= np.max(spectrum)
+
+    return E_grid, spectrum, gaussians
+
+def lorentzian_spectrum_on_grid(evals, relInt, E_grid, gamma):
+    energies = np.asarray(evals).flatten()
+    intensities = np.asarray(relInt).flatten()
+
+    spectrum = np.zeros_like(E_grid, dtype=float)
+
+    for Ek, Ik in zip(energies, intensities):
+        spectrum += Ik * gamma**2 / ((E_grid - Ek)**2 + gamma**2)
+
+    return spectrum
+
 def main():
     parser = argparse.ArgumentParser(
         description='Script to convolve a spectrum'
@@ -113,14 +164,37 @@ def main():
         normalize = True
     else:
         normalize = False
+    
+    E_grid = np.arange(emin, emax, dE)
 
     data = np.loadtxt(fileinp, skiprows=1)
-    evals, relInt = data[:,-2], data[:,-1]
+    vN,JN,mN,sigmaN,LN,pN,IndN,vC,JC,mC,sigmaC,LC,pC,IndC,evals,relInt = data.T
+
+    dV = vC - vN
+    dJ = JC - JN
+
+    spectra_dVdJ = {}
+
+    for dv, dj in sorted(set(zip(dV, dJ))):
+        mask = (dV == dv) & (dJ == dj)
+        spectra_dVdJ[(dv, dj)] = lorentzian_spectrum_on_grid(evals[mask], relInt[mask], E_grid, sigma_eV)
+
+    cols = [E_grid]#, spec_total]
+    header = ["E"]#, "total"]
+
+    for dv, dj in sorted(spectra_dVdJ):
+        cols.append(spectra_dVdJ[(dv, dj)])
+        header.append(f"dV={dv}_dJ={dj}")
+
+    data = np.column_stack(cols)
+    np.savetxt(fileout, data, header=" ".join(header))
+
     # E_grid, spectrum, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
     # E_grid, spectrum, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
-    E, spec, lorentzians = spectrum_lorentzian(evals, relInt, dE, sigma_eV, emin, emax, normalize)
+    # E, spec, lorentzians = spectrum_lorentzian(evals, relInt, dE, sigma_eV, emin, emax, normalize)
+    # E, spec, gaussians = spectrum_gaussian(evals, relInt, dE, sigma_eV, emin, emax, normalize)
     # np.savetxt(fileout, np.column_stack((E_grid, envelope, spectrum, spectrum_conv)))
-    np.savetxt(fileout, np.column_stack((E,spec)))
+    # np.savetxt(fileout, np.column_stack((E,spec)))
 
 
 if __name__ == '__main__':
