@@ -461,7 +461,8 @@ def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
                                             continue    
                                         # rotcoeff += W3_exp(Jival,DJ,Jfval,indexPH[i,k,m,2],djom,indexPHM[j,l,n,2])
                                         rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
-                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
+                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*diff*((rotcoeff)*abs(bk_val))**2)
+                            # relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
     return evals,relInt
 

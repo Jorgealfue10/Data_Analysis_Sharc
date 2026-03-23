@@ -18,7 +18,7 @@ module intCalcs
 
     type dys_dictt
         type(dys_key) :: key
-        complex(kind=8), allocatable :: val(:)
+        real(kind=8), allocatable :: val(:)
         logical :: used = .false.
     end type
 
@@ -36,13 +36,14 @@ module intCalcs
     logical function is_head_eigenvib(line)
         implicit none
 
-        character(len=*), intent(in) :: line
-        integer :: a 
+        character(len=256), intent(in) :: line
+        integer :: a,c
         real(kind=8) :: b
-
-        read(line,*,err=999) a,b
+        
+        read(line,*,err=999) a,b,c
 
         is_head_eigenvib = .true.
+        return
         
         999 is_head_eigenvib = .false.
     end function
@@ -54,7 +55,7 @@ module intCalcs
     subroutine parse_duo_vib_einfun(fname,npoints,nvib,vibmat)
         implicit none
 
-        character(len=*), intent(in) :: fname
+        character(len=256), intent(inout) :: fname
         integer, intent(in) :: npoints,nvib
         real(kind=8), intent(out) :: vibmat(npoints,nvib)
 
@@ -62,7 +63,7 @@ module intCalcs
         integer :: iunit, ios, ncurrvib, ncurrpoint, auxint
         real(kind=8) :: val, eval
 
-        ncurrpoint = 1 ; ncurrvib = 1
+        fname = trim(fname)
 
         open(newunit=iunit,file=fname,status='old',action='read')
 
@@ -132,54 +133,77 @@ module intCalcs
     ! Reading J values E and quantum numbers
     !---------------------------------------------------------------------------!
 
-    subroutine read_J_values(fname,nvib,nj,mult,nLambda,nOmega,Jvals,index_list,key_dict)
+    subroutine read_J_values(fname,nvib,nj,mult,nOmega,Jvals,index_list,key_dict)
         implicit none
 
-        character(len=*), intent(in) :: fname
-        integer, intent(in) :: nvib, nj, mult, nLambda, nOmega
+        character(len=256), intent(in) :: fname
+        integer, intent(in) :: nvib, nj, nOmega
+        real(kind=8), intent(in) :: mult
         real(kind=8), intent(out) :: Jvals(nvib,nj,nOmega), index_list(nvib,nj,nOmega,7),key_dict(nvib,nj,nOmega,6)
 
-        integer :: iunit, ios, i, Smult
+        integer :: iunit, ios, indOm
         character(len=256) :: line, aux
         character(len=1) :: parity
-        real(kind=8) :: J, eval, stt, vibn, lambda, sval, sigma, omega, pm, index
+        real(kind=8) :: J, eval, stt, vibn, lambda, sval, sigma, omega, pm, ind, Smult
 
-        Smult = (mult-1)/2
+
+        Smult = (mult-1.d0)/2.d0
 
         open(newunit=iunit,file=fname,status='old',action='read')        
+
+        Jvals = 0.d0 ; index_list = 0.d0 ; key_dict = 0.d0
 
         do 
             read(iunit,'(A)', iostat=ios) line
             if (ios /= 0 ) exit
 
-            read(line,*) J, index, eval, stt, vibn, lambda, sval, sigma, omega, parity, aux, aux
-            if (vibn < nvib) then
-                Jvals(int(vibn)+1, int(J)+1, int(omega)+1) = eval
+            read(line,*) J, ind, eval, stt, vibn, lambda, sval, sigma, omega, parity, aux, aux
+            if (vibn+1 < nvib) then
+                if (abs(Smult - nint(Smult)) < 1d-8) then
+                    indOm = int(omega+Smult)+1
+                else 
+                    ! print*,int(vibn)+1, J, int(J)+1, int(omega+Smult)+2
+                    indOm = int(omega+Smult)+2
+                endif
 
+                ! print*,"joder",int(vibn)+1, int(J)+1, indOm, eval,index
+                Jvals(int(vibn)+1, int(J)+1, indOm) = eval
+
+                ! print*,'A'
                 if (parity.eq."-") then
                     pm = -1.d0
                 else
                     pm = 1.d0
                 endif
 
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,1) = vibn
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,2) = J
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,3) = omega
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,4) = sigma
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,5) = lambda
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,6) = pm
-                index_list(int(vibn)+1, int(J)+1, int(omega+Smult)+1,7) = index
+                if (int(vibn)+1 > nvib .or. int(J)+1 > nj .or. indOm > nOmega) then
+                    print*, "OUT OF BOUNDS:"
+                    print*, "vibn=", vibn, "J=", J, "omega=", omega
+                    print*, "indices=", int(vibn)+1, int(J)+1, indOm
+                    print*, "limits=", nvib, nj, nOmega
+                    stop
+                endif
 
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,1) = J
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,2) = omega
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,3) = sigma
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,4) = lambda
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,5) = pm
-                key_dict(int(vibn)+1, int(J)+1, int(omega+Smult)+1,6) = index
+                index_list(int(vibn)+1, int(J)+1, indOm,1) = vibn
+                index_list(int(vibn)+1, int(J)+1, indOm,2) = J
+                index_list(int(vibn)+1, int(J)+1, indOm,3) = omega
+                index_list(int(vibn)+1, int(J)+1, indOm,4) = sigma
+                index_list(int(vibn)+1, int(J)+1, indOm,5) = lambda
+                index_list(int(vibn)+1, int(J)+1, indOm,6) = pm
+                index_list(int(vibn)+1, int(J)+1, indOm,7) = ind
+
+                key_dict(int(vibn)+1, int(J)+1, indOm,1) = J
+                key_dict(int(vibn)+1, int(J)+1, indOm,2) = omega
+                key_dict(int(vibn)+1, int(J)+1, indOm,3) = sigma
+                key_dict(int(vibn)+1, int(J)+1, indOm,4) = lambda
+                key_dict(int(vibn)+1, int(J)+1, indOm,5) = pm
+                key_dict(int(vibn)+1, int(J)+1, indOm,6) = ind
+                print*,int(vibn)+1, int(J)+1, indOm, &
+                index_list(int(vibn)+1, int(J)+1, indOm,1), index_list(int(vibn)+1, int(J)+1, indOm,2)
             endif
         enddo
 
-        close(iunit)
+        ! close(iunit)
     end subroutine
 
     !---------------------------------------------------------------------------!
@@ -251,7 +275,8 @@ module intCalcs
         implicit none
 
         character(len=*), intent(in) :: fname
-        integer, intent(in) :: nvib, nj, mult, nOmega
+        integer, intent(in) :: nvib, nj, nOmega
+        real(kind=8), intent(in) :: mult
         type(coef_dictt), allocatable, intent(out) :: coef_dict(:)
         integer, intent(out) :: ndict
 
@@ -325,9 +350,9 @@ module intCalcs
     end function
 
     function find_dys_index(dict, ndict, key) result(idx)
+        integer :: idx, i, ndict
         type(dys_dictt), intent(in) :: dict(ndict)
         type(dys_key), intent(in) :: key
-        integer :: idx, i
 
         idx = -1
         do i = 1, ndict
@@ -370,13 +395,14 @@ module intCalcs
         endif
     end subroutine
 
-    subroutine read_dys_bySigma(d1,d2,nd1,nd2,path,dict,ndict,r)
+    subroutine read_dys_bySigma(d1,d2,sd1,sd2,nd1,nd2,path,dict,ndict,r)
         implicit none
 
         integer, intent(in) :: nd1,nd2
         integer, intent(in) :: d1(nd1),d2(nd2)
+        real(kind=8), intent(in) :: sd1(nd1),sd2(nd2)
         character(len=*), intent(in) :: path
-        type(dys_dictt), allocatable, intent(out) :: dict(:)
+        type(dys_dictt), intent(out) :: dict(nd1*nd2)
         integer, intent(out) :: ndict
         real(kind=8), allocatable, intent(out) :: r(:)
 
@@ -387,27 +413,24 @@ module intCalcs
 
         character(len=256) :: fname
 
-        allocate(dict(nd1*nd2))
         ndict = 0
-
         do i = 1, nd1
             do j = 1, nd2
-                sigma_i = d1(i)
-                sigma_j = d2(j)
+                sigma_i = sd1(i) 
+                sigma_j = sd2(j) 
                 key%vals = [sigma_i,sigma_j]
                 
-                write(fname,'(A,"/dyson_",I2.2,"_",I2.2,".dat")') trim(path),i,j
+                write(fname,'(A,"dyson_",I2.2,"_",I2.2,".dat")') trim(path),d1(i),d2(j)
                 
                 call read_dyson_file(fname,r,dyson,nr)
+                ndict = ndict + 1
+                dict(ndict)%val = dyson
 
-                call append_sigma(dict, ndict, key, nr, dyson)
+                ! call append_sigma(dict, ndict, key, nr, dyson)
 
             enddo
         enddo
 
-        do i = 1, ndict
-            dict(i)%val = sqrt(dict(i)%val)
-        enddo
     end subroutine
 
     !---------------------------------------------------------------------------!
@@ -548,39 +571,51 @@ module intCalcs
     !Make intensity matrices including Dyson splines as a function of sigma combs
     !---------------------------------------------------------------------------!
 
-    subroutine intT_sigma(PHener,PHMener,nvib,rvals,ndys,npoints,dysondict,PHvibs,PHMvibs,mask, &
-        Tvib,Trot,ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ,numvibPH,numvibPHM, &
-        numJPH,numJPHM,numOmPH,numOmPHM,indexPH,indexPHM, &
-        keylistPH,keylistPHM,coefPH,coefPHM,evals,relInt)
+    subroutine intT_sigma(PHener,PHMener,nvib,rcomp,rvals,npoints,nrdys,ndys,dysondict, &
+        PHvibs,PHMvibs,mask,Tvib,Trot,ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ, &
+        numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM,indexPH,indexPHM, &
+        keylistPH,keylistPHM,coefPH,coefPHM,ndictN,ndictC,evals,relInt)
 
         use spline_module
 
         implicit none
-        integer, intent(in)  :: numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM,ndys,npoints,nvib
+        integer, intent(in)  :: numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM
+        integer, intent(in)  :: ndys,npoints,nvib,nrdys,ndictN,ndictC        
         real(kind=8), intent(in)  :: PHener(numvibPH,numJPH,numOmPH),PHMener(numvibPHM,numJPHM,numOmPHM)
         real(kind=8), intent(in)  :: Tvib,Trot,ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ
-        real(kind=8), intent(in)  :: rvals(npoints)
-        real(kind=8), intent(in)  :: PHvibs(numvibPH,npoints),PHMvibs(numvibPHM,npoints)
+        real(kind=8), intent(in)  :: PHvibs(npoints,numvibPH),PHMvibs(npoints,numvibPHM),rcomp(npoints),rvals(nrdys)
         real(kind=8), intent(in)  :: indexPH(numvibPH,numJPH,numOmPH,7),indexPHM(numvibPHM,numJPHM,numOmPHM,7)
         real(kind=8), intent(in)  :: keylistPH(numvibPH,numJPH,numOmPH,6),keylistPHM(numvibPHM,numJPHM,numOmPHM,6)
 
-        logical, intent(in)  :: mask
+        real(kind=8), allocatable :: djlist(:)
+        logical, intent(in)  :: mask(npoints)
 
         complex(kind=8), pointer :: coef_ini(:),coef_fin(:)
         real(kind=8), pointer :: sigma_r(:)
 
-        type(dys_dictt), intent(in)  :: dysondict(ndys)
+        type(dys_dictt), intent(in), target  :: dysondict(ndys)
         type(dys_key) :: dkey
-        type(coef_dictt), intent(in)  :: coefPH(nvib),coefPHM(nvib)
+        type(coef_dictt), intent(in), target  :: coefPH(nvib),coefPHM(nvib)
         type(coef_key)  :: ckeyPH,ckeyPHM
-        type(spline1d), intent(in) :: dys_splines(ndys)
+        
+        real(kind=8), intent(out)  :: &
+            evals(numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM), &
+            relInt(numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM)
 
-        real(kind=8), intent(out)  :: evals(numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM),relInt(numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM)
+        integer :: i,j,k,l,m,n,pl,nvalid,djO,djJ
+        integer :: idxd,idxPH,idxPHM
+        real(kind=8) :: normPHvib,Ehtocm
+        real(kind=8) :: bk_val,degJi,degvi,diff
+        real(kind=8) :: E_PH, E_PHM, erot, evib
+        real(kind=8) :: Jival, Jfval, OmN, OmC, rotcoeff
+        real(kind=8), allocatable :: spldys(:),dymat(:,:)
+        real(kind=8), allocatable :: vib_PH(:),vib_PHM(:),normPHrot(:),rcomp_masked(:)
+        type(spline1d), allocatable :: dys_spline(:)
 
-        integer :: i,j,k,l,m,n
-        real(kind=8) :: normPHvib,normPHrot,Ehtocm
-        real(kind=8) :: spldys(size(rvals)),dymat(size(rvals),size(rvals))
-
+        nvalid = count(mask)
+        allocate(vib_PH(nvalid),vib_PHM(nvalid))
+        allocate(dys_spline(ndys),normPHrot(numvibPH))
+        allocate(spldys(nvalid),dymat(nvalid,nvalid),rcomp_masked(nvalid))
         Ehtocm = 219474.6
 
         n = int(2*DJ) + 1
@@ -591,7 +626,7 @@ module intCalcs
         enddo
 
         do i=1,ndys
-            call init_spline(dys_spline(i),rvals,dysondict(i)%val)
+            call init_spline(dys_spline(i),rvals*0.52917,dysondict(i)%val(:))
         enddo
 
         call vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,normPHvib)
@@ -599,51 +634,65 @@ module intCalcs
 
         do i=1,numvibPH
 
-            PHvibsvn = PHvibs(:,i) ; PHvibsvn = pack(PHvibsvn,mask)
-            PHMvibsvn = PHMvibs(:,i) ; PHMvibsvn = pack(PHMvibsvn,mask)
+            vib_PH = pack(PHvibs(:,i),mask)
+            vib_PHM = pack(PHMvibs(:,i),mask)
 
             E_PH = (PHener(i,1,2)+ZPEPH)/Ehtocm
-            evib = E_PH - ((min(PHener(:,1,2)) + ZPEPH)/Ehtocm)
+            evib = E_PH - ((minval(PHener(:,1,2)) + ZPEPH)/Ehtocm)
             degvi = exp(-evib/(3.166811563*10**(-6)*Tvib))/normPHvib
 
             do j=1,numvibPHM
-
                 do k=1,numJPH
                     do l=1,numJPHM
                         do m=1,numOmPH
 
                             E_PH = (PHener(i,k,m)+ZPEPH)/Ehtocm
-                            erot = E_PH - ((min(PHener(i,:,:)) + ZPEPH)/Ehtocm)
+                            erot = E_PH - ((minval(PHener(i,:,:)) + ZPEPH)/Ehtocm)
                             Jival = indexPH(i,k,m,2) ; OmN = indexPH(i,k,m,3)
                             degJi = ((2*Jival+1)*exp(-erot/(3.166811563*10**(-6)*Trot)))/normPHvib
                             E_PH = E_PH + PHsttsE
 
-                            ckeyPH%vals = [keylistPH(i,k,m,1),keylistPH(i,k,m,2),keylistPH(i,k,m,3),keylistPH(i,k,m,4),keylistPH(i,k,m,5),keylistPH(i,k,m,6)]
+                            ckeyPH%vals = &
+                            [keylistPH(i,k,m,1),keylistPH(i,k,m,2),keylistPH(i,k,m,3),&
+                            keylistPH(i,k,m,4),keylistPH(i,k,m,5),keylistPH(i,k,m,6)]
 
                             do n=1,numOmPHM
 
-                                ckeyPHM%vals = [keylistPHM(j,l,n,1),keylistPHM(j,l,n,2),keylistPHM(j,l,n,3),keylistPHM(j,l,n,4),keylistPHM(j,l,n,5),keylistPHM(j,l,n,6)]
+                                ckeyPHM%vals = &
+                                [keylistPHM(j,l,n,1),keylistPHM(j,l,n,2),keylistPHM(j,l,n,3), &
+                                keylistPHM(j,l,n,4),keylistPHM(j,l,n,5),keylistPHM(j,l,n,6)]
+
                                 dkey%vals = [indexPH(i,k,m,3),indexPHM(j,l,n,3)]
                                 
-                                idxPH = find_coef_index(coefPH, numvib, ckeyPH)
-                                idxPHM = find_coef_index(coefPHM, numvib, ckeyPHM)
+                                idxPH = find_coef_index(coefPH, nvib, ckeyPH)
+                                idxPHM = find_coef_index(coefPHM, nvib, ckeyPHM)
                                 if (idxPH == 0 .or. idxPHM == 0) cycle
 
-                                coef_ini => coefPH(idxPH)%coef
-                                coef_fin => coefPHM(idxPHM)%coef
+                                coef_ini => coefPH(idxPH)%val
+                                coef_fin => coefPHM(idxPHM)%val
                                 
-                                idxD = find_dys_index(dysondict, dkey)
-                                if (idxD == 0) cycle
+                                idxD = find_dys_index(dysondict, ndys, dkey)
+                                if (idxD < 0) stop
                                 sigma_r => dysondict(idxD)%val
 
-                                call eval_spline(sigma_r,rvals,spldys)
+                                print*,"B"
+                                do pl = 1, nvalid
+                                    call eval_spline(dys_spline(idxD), rcomp_masked(pl), spldys(pl))
+                                end do
 
-                                do pl=1,size(rvals)
+                                print*,"C"
+                                dymat = 0.d0
+                                do pl=1,nvalid
                                     dymat(pl,pl) = spldys(pl)
+                                    ! print*,pl,spldys(pl),vib_PH(pl),vib_PHM(pl)
                                 enddo
+                                
+                                print*,size(dymat,1),size(dymat,2)
+                                print*,"D"
+                                call bra_ket_coef(nvalid, numvibPH, vib_PH, vib_PHM, dymat, &
+                                                coef_ini, coef_fin, bk_val)
 
-                                call bra_ket_coef(size(rvals), numvibPH, vib_PH, vib_PHM, dymat, coef_ini, coef_fin, braket)
-
+                                print*,"E"
                                 E_PHM = (PHMener(j,l,n)+ZPEPHM)/Ehtocm
                                 E_PHM = E_PHM + PHMsttsE
 
@@ -652,13 +701,14 @@ module intCalcs
                                 Jfval = indexPHM(j,l,n,2) ; OmC = indexPHM(j,l,n,3)
 
                                 rotcoeff = 0.d0
-                                do dj=1,n
-                                    if ((abs(Jival-Jfval) > djlist(dj)) .or. (djlist(dj) > (Jival+Jfval))) cycle
-                                    if (abs((Jival + Jfval + (djlist(dj)) - nint(Jival + Jfval + (djlist(dj))))) > 1d-8) cycle
+                                print*,"D"
+                                do djJ=1,n
+                                    if ((abs(Jival-Jfval) > djlist(djJ)) .or. (djlist(djJ) > (Jival+Jfval))) cycle
+                                    if (abs((Jival + Jfval + (djlist(djJ)) - nint(Jival + Jfval + (djlist(djJ))))) > 1d-8) cycle
                                     do djO=1,n
-                                        if (-djlist(dj) > djlist(djO).and.(djlist(djO) > djlist(dj))) cycle
+                                        if (-djlist(djJ) > djlist(djO).and.(djlist(djO) > djlist(djJ))) cycle
                                         if (abs((OmN + OmC + (djlist(djO)) - nint(OmN + OmC + (djlist(djO))))) > 1d-8) cycle
-                                        call W3_exp(Jival,Jfval,djlist(dj),OmN,OmC,-djlist(djO),rotcoeff)
+                                        call W3_exp(Jival,Jfval,djlist(djJ),OmN,OmC,-djlist(djO),rotcoeff)
                                         rotcoeff = rotcoeff + abs(degvi*degJi*(rotcoeff*abs(bk_val))**2)
                                     enddo
                                 enddo
@@ -678,19 +728,19 @@ module intCalcs
     ! Writing out files
     !---------------------------------------------------------------------------!
 
-    subroutine dump_spectrum_long(fname,numvN,numvC,nJN,nJC,nOmN,nOmC,evals,relInt,indexN,indexC,energy_unit="eV",tol_I=0.0d0)
+    subroutine dump_spectrum_long(fname,numvN,numvC,nJN,nJC,nOmN,nOmC,evals,&
+                                relInt,indexN,indexC,energy_unit,tol_I)
         implicit none
         
         character(len=*), intent(in) :: fname
         integer, intent(in) :: numvN,numvC,nJN,nJC,nOmN,nOmC
-        real(kind=8), intent(in) :: evals(numvN,nJN,nOmN,numvC,nJC,nOmC)
+        real(kind=8), intent(inout) :: evals(numvN,nJN,nOmN,numvC,nJC,nOmC)
         real(kind=8), intent(in) :: relInt(numvN,nJN,nOmN,numvC,nJC,nOmC)
-        integer, intent(in) :: indexN(numvN,nJN,nOmN,numvC,nJC,nOmC)
-        integer, intent(in) :: indexC(numvC,nJC,nOmC)
+        integer, intent(in) :: indexN(numvN,nJN,nOmN,7), indexC(numvC,nJC,nOmC,7)
         character(len=*), intent(in) :: energy_unit
         real(kind=8), intent(in) :: tol_I
 
-        integer :: i,j,k,l,m,n
+        integer :: i,j,k,l,m,n,iunit
         
         open(newunit=iunit,file=fname,action='write')
 
@@ -708,9 +758,12 @@ module intCalcs
                                     evals(i,j,k,l,m,n) = evals(i,j,k,l,m,n)*219474.63
                                 endif
                                     
-                                write(iunit,fmt='(6(f2.1,1x),1x,6(f2.1,1x),1x,f12.6,1x,f12.6,)') indexN(i,j,k,1),indexN(i,j,k,2),indexN(i,j,k,3),indexN(i,j,k,4),indexN(i,j,k,5),indexN(i,j,k,6), &
-                                                    indexC(l,m,1),indexC(l,m,2),indexC(l,m,3),indexC(l,m,4),indexC(l,m,5),indexC(l,m,6), &
-                                                    evals(i,j,k,l,m,n),relInt(i,j,k,l,m,n)
+                                write(iunit,fmt='(6(f2.1,1x),1x,6(f2.1,1x),1x,f12.6,1x,f12.6)') &
+                                    indexN(i,j,k,1),indexN(i,j,k,2),indexN(i,j,k,3), &
+                                    indexN(i,j,k,4),indexN(i,j,k,5),indexN(i,j,k,6), &
+                                    indexC(l,m,n,1),indexC(l,m,n,2),indexC(l,m,n,3),&
+                                    indexC(l,m,n,4),indexC(l,m,n,5),indexC(l,m,n,6), &
+                                    evals(i,j,k,l,m,n),relInt(i,j,k,l,m,n)
 
                             enddo
                         enddo
@@ -722,5 +775,20 @@ module intCalcs
         close(iunit)
     end subroutine
 
+    !---------------------------------------------------------------------------!
+    ! Utility functions
+    !---------------------------------------------------------------------------!
+
+    integer function count_values(line)
+        implicit none
+        character(len=*), intent(in) :: line
+        integer :: i
+        count_values = 0
+        do i = 1, len_trim(line)
+            if (line(i:i) /= ' ' .and. (i==1 .or. line(i-1:i-1) /= ' ')) then
+                count_values = count_values + 1
+            endif
+        enddo
+    end function
 
 end module intCalcs
