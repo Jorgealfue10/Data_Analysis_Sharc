@@ -23,7 +23,7 @@ program calcintsDUO
     type(state_map), allocatable :: s1(:), s2(:)
     
     character(len=256) :: fname, fnameN, fnameC, fileout, path, line
-    character(len=256) :: fNvib,fCvib,fNJval,fCJval
+    character(len=256) :: fNvib,fCvib,fNJval,fCJval,fNcoeff,fCcoeff
     character(len=32) :: key, stt1, stt2
     character(len=2) :: energy_unit
     
@@ -120,12 +120,13 @@ program calcintsDUO
     call read_J_values(fNJval,nvib,nj,multN,nOmN,JvalsN,indexN,keyN)
     call read_J_values(fCJval,nvib,nj,multC,nOmC,JvalsC,indexC,keyC)
     
-    print*, "nvib, nj =", nvib, nj
-    
+    fNcoeff = trim(fnameN) // "vibeigenvect_vectors.chk"
+    fCcoeff = trim(fnameC) // "vibeigenvect_vectors.chk"
+    call read_coefficients(fNcoeff,nvib,nj,multN,nOmN,coef_dictN,ndictN)
+    print*,"A"
+    call read_coefficients(fCcoeff,nvib,nj,multC,nOmC,coef_dictC,ndictC)
+    print*,"B"
 
-    call read_coefficients(fnameN,nvib,nj,multN,nOmN,coef_dictN,ndictN)
-    call read_coefficients(fnameC,nvib,nj,multC,nOmC,coef_dictC,ndictC)
-    
     ns1 = size(s1(1)%idx) ; ns2 = size(s2(1)%idx)
     ! s1 = s1(1)%idx ; s2 = s2(1)%idx
     print*, "ns1, ns2 =", ns1, ns2
@@ -155,13 +156,11 @@ program calcintsDUO
             relInt(numvibN,numvibC,numJN,numJC,nOmN,nOmC))
     ! if (size(DJvals) > 1) then
 
-    print*, indexN(33,81,1,:), indexC(33,81,1,:),keyN(33,81,1,:), keyC(33,81,1,:)
-    !     do i=1,size(DJvals)
-    !         DJ = DJvals(i)
-            call intT_sigma(JvalsN,JvalsC,nvib,rcomp,rvals,npoints,size(rvals),ndys,dysdict, &
-                vibmatN,vibmatC,mask,Tvib,Trot,ZPEN,ZPEC,EN,EC,DJ, &
-                numvibN,numvibC,numJN,numJC,nOmN,nOmC,indexN,indexC, &
-                keyN,keyC,coef_dictN,coef_dictC,ndictN,ndictC,evals,relInt)
+    ! call intT_sigma(JvalsN,JvalsC,nvib,nj,rcomp,rvals,npoints,size(rvals,1),ndys,dysdict, &
+    !                 vibmatN,vibmatC,mask,Tvib,Trot,ZPEN,ZPEC,EN,EC,DJ, &
+    !                 numvibN,numvibC,numJN,numJC,nOmN,nOmC,indexN,indexC, &
+    !                 keyN,keyC,coef_dictN,coef_dictC,ndictN,ndictC, &
+    !                 evals,relInt)
             
     !         fileout = trim(fnameN) // trim(fnameC) // trim(character(Trot)) // &
     !                 trim(character(Tvib)) // trim(character(DJvals)) // ".dat"

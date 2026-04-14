@@ -2,8 +2,13 @@ module intCalcs
     implicit none
 
     type coef_key
-        real(kind=8) :: vals(6)
-    end type coef_key
+        real(kind=8) :: J
+        real(kind=8) :: Om
+        real(kind=8) :: S
+        real(kind=8) :: L
+        integer      :: parity
+        integer      :: indx
+    end type
 
     type coef_dictt
         type(coef_key) :: key
@@ -198,8 +203,6 @@ module intCalcs
                 key_dict(int(vibn)+1, int(J)+1, indOm,4) = lambda
                 key_dict(int(vibn)+1, int(J)+1, indOm,5) = pm
                 key_dict(int(vibn)+1, int(J)+1, indOm,6) = ind
-                print*,int(vibn)+1, int(J)+1, indOm, &
-                index_list(int(vibn)+1, int(J)+1, indOm,1), index_list(int(vibn)+1, int(J)+1, indOm,2)
             endif
         enddo
 
@@ -213,38 +216,46 @@ module intCalcs
     logical function same_key(a,b)
         implicit none
         type(coef_key), intent(in) :: a,b
-        same_key = all((a%vals - b%vals) < 1d-8)
+
+        same_key = .true.
+
+        if (abs(a%J  - b%J ) > 1d-8) same_key = .false.
+        if (abs(a%Om - b%Om) > 1d-8) same_key = .false.
+        if (abs(a%S  - b%S ) > 1d-8) same_key = .false.
+        if (abs(a%L  - b%L ) > 1d-8) same_key = .false.
+        if (a%parity /= b%parity)    same_key = .false.
+        if (a%indx   /= b%indx)      same_key = .false.
     end function
 
-    function find_coef_index(dict, ndict, key) result(idx)
-        implicit none
-        integer, intent(in) :: ndict
-        type(coef_dictt), intent(in) :: dict(ndict)
-        type(coef_key), intent(in) :: key
+    ! function find_coef_index(dict, ndict, key) result(idx)
+    !     implicit none
+    !     integer, intent(in) :: ndict
+    !     type(coef_dictt), intent(in) :: dict(ndict)
+    !     type(coef_key), intent(in) :: key
 
-        integer :: idx, i
+    !     integer :: idx, i
 
-        idx = -1
+    !     idx = -1
 
-        do i = 1, ndict
-            if (dict(i)%used) then
-                if (same_key(dict(i)%key, key)) then
-                    idx = i
-                    return
-                endif
-            endif
-        enddo
-    end function
+    !     do i = 1, ndict
+    !         if (dict(i)%used) then
+    !             if (same_key(dict(i)%key, key)) then
+    !                 idx = i
+    !                 return
+    !             endif
+    !         endif
+    !     enddo
+    ! end function
 
-    subroutine append_coef(coef_dict, ndict, nvib, key, coeff)
+    subroutine append_coef(coef_dict,ndict, nvib, key, coeff)
         implicit none
         integer, intent(inout) :: ndict
         integer, intent(in) :: nvib
-        type(coef_dictt), intent(inout) :: coef_dict(ndict)
+        type(coef_dictt), allocatable, intent(inout) :: coef_dict(:)
         type(coef_key), intent(in) :: key
         real(kind=8), intent(in) :: coeff
 
-        integer :: i,n
+        integer :: i
         logical :: found
 
         found = .false.
@@ -262,12 +273,12 @@ module intCalcs
 
         if (.not.found) then
             ndict = ndict + 1
-            coef_dict(i)%used = .true.
-            coef_dict(i)%key = key
-            coef_dict(i)%nread = 1
             allocate(coef_dict(ndict)%val(nvib))
-            coef_dict(i)%val = cmplx(0.d0,0.d0,kind=8)
-            coef_dict(i)%val(1) = cmplx(coeff,0.d0,kind=8)
+            coef_dict(ndict)%used = .true.
+            coef_dict(ndict)%key = key
+            coef_dict(ndict)%nread = 1
+            coef_dict(ndict)%val = cmplx(0.d0,0.d0,kind=8)
+            coef_dict(ndict)%val(1) = cmplx(coeff,0.d0,kind=8)
         endif
     end subroutine
 
@@ -282,26 +293,50 @@ module intCalcs
 
         integer :: iunit, ios, maxdict
         character(len=256) :: line, aux
-        real(kind=8) :: J, coeff, stt, vibn, lambda, sval, sigma, omega, pm, index
+        real(kind=8) :: J, coeff, stt, vibn, lambda, sval, sigma, omega, pm, index, Smult
         type(coef_key) :: key
+
+        ndict = 0
+        Smult = (mult-1.d0)/2.d0
 
         maxdict = nvib*nj*nOmega
         allocate(coef_dict(maxdict))
-        ndict = 0
+        coef_dict(:)%used = .false.
+        print*, "maxdict=", maxdict, size(coef_dict)
 
         open(newunit=iunit,file=fname,status='old',action='read')
 
         do 
             read(iunit,'(A)', iostat=ios) line
             if (ios /= 0 ) exit
-
+            
             read(line,*,iostat=ios) index, J, pm, coeff, aux, vibn, lambda, sval, sigma, omega, aux
             if (ios /= 0 ) cycle
 
-            key%vals = [J,omega,sigma,lambda,pm,index]
+            if (abs(Smult - nint(Smult)) < 1d-8) then
+                    indOm = int(omega+Smult)+1
+            else 
+                indOm = int(omega+Smult)+2
+            endif
 
+            if (lambda < 0.d0) then 
+                nl = 1
+            coef_mat(int(vibn)+1,int(index),int(J)+1,indOm,int(lambda),int(sigma+Smult)+1,int(pm)) = coeff
+
+            ! key%J = J
+            ! key%Om = omega
+            ! key%S = sigma
+            ! key%L = lambda
+            ! key%parity = int(pm)
+            ! key%indx = int(index)
+                
+            ! coef_dict(ndict)%key = key
             call append_coef(coef_dict, ndict, nvib, key, coeff)
+            ! print*, vibn, line
         enddo
+
+        print*, "ndict=", ndict
+        print*, "nread=", coef_dict(1)%nread
 
         close(iunit)
     end subroutine
@@ -571,7 +606,7 @@ module intCalcs
     !Make intensity matrices including Dyson splines as a function of sigma combs
     !---------------------------------------------------------------------------!
 
-    subroutine intT_sigma(PHener,PHMener,nvib,rcomp,rvals,npoints,nrdys,ndys,dysondict, &
+    subroutine intT_sigma(PHener,PHMener,nvib,nj,rcomp,rvals,npoints,nrdys,ndys,dysondict, &
         PHvibs,PHMvibs,mask,Tvib,Trot,ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ, &
         numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM,indexPH,indexPHM, &
         keylistPH,keylistPHM,coefPH,coefPHM,ndictN,ndictC,evals,relInt)
@@ -580,12 +615,12 @@ module intCalcs
 
         implicit none
         integer, intent(in)  :: numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM
-        integer, intent(in)  :: ndys,npoints,nvib,nrdys,ndictN,ndictC        
-        real(kind=8), intent(in)  :: PHener(numvibPH,numJPH,numOmPH),PHMener(numvibPHM,numJPHM,numOmPHM)
+        integer, intent(in)  :: ndys,npoints,nvib,nj,nrdys,ndictN,ndictC      
+        real(kind=8), intent(in)  :: PHener(nvib,nj,numOmPH),PHMener(nvib,nj,numOmPHM)
         real(kind=8), intent(in)  :: Tvib,Trot,ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ
-        real(kind=8), intent(in)  :: PHvibs(npoints,numvibPH),PHMvibs(npoints,numvibPHM),rcomp(npoints),rvals(nrdys)
-        real(kind=8), intent(in)  :: indexPH(numvibPH,numJPH,numOmPH,7),indexPHM(numvibPHM,numJPHM,numOmPHM,7)
-        real(kind=8), intent(in)  :: keylistPH(numvibPH,numJPH,numOmPH,6),keylistPHM(numvibPHM,numJPHM,numOmPHM,6)
+        real(kind=8), intent(in)  :: PHvibs(npoints,nvib),PHMvibs(npoints,nvib),rcomp(npoints),rvals(nrdys)
+        real(kind=8), intent(in)  :: indexPH(nvib,nj,numOmPH,7),indexPHM(nvib,nj,numOmPHM,7)
+        real(kind=8), intent(in)  :: keylistPH(nvib,nj,numOmPH,6),keylistPHM(nvib,nj,numOmPHM,6)
 
         real(kind=8), allocatable :: djlist(:)
         logical, intent(in)  :: mask(npoints)
@@ -614,7 +649,7 @@ module intCalcs
 
         nvalid = count(mask)
         allocate(vib_PH(nvalid),vib_PHM(nvalid))
-        allocate(dys_spline(ndys),normPHrot(numvibPH))
+        allocate(dys_spline(ndys),normPHrot(nvib))
         allocate(spldys(nvalid),dymat(nvalid,nvalid),rcomp_masked(nvalid))
         Ehtocm = 219474.6
 
@@ -629,19 +664,21 @@ module intCalcs
             call init_spline(dys_spline(i),rvals*0.52917,dysondict(i)%val(:))
         enddo
 
-        call vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,normPHvib)
-        call rot_normf(Trot,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH,normPHrot)
+        call vib_normf(Tvib,PHener,ZPEPH,PHsttsE,nvib,nj,numOmPH,normPHvib)
+        call rot_normf(Trot,PHener,ZPEPH,PHsttsE,nvib,nj,numOmPH,indexPH,normPHrot)
 
+        rcomp_masked = pack(rcomp, mask)
         do i=1,numvibPH
 
             vib_PH = pack(PHvibs(:,i),mask)
-            vib_PHM = pack(PHMvibs(:,i),mask)
 
             E_PH = (PHener(i,1,2)+ZPEPH)/Ehtocm
             evib = E_PH - ((minval(PHener(:,1,2)) + ZPEPH)/Ehtocm)
             degvi = exp(-evib/(3.166811563*10**(-6)*Tvib))/normPHvib
 
             do j=1,numvibPHM
+                vib_PHM = pack(PHMvibs(:,j),mask)
+
                 do k=1,numJPH
                     do l=1,numJPHM
                         do m=1,numOmPH
@@ -652,27 +689,28 @@ module intCalcs
                             degJi = ((2*Jival+1)*exp(-erot/(3.166811563*10**(-6)*Trot)))/normPHvib
                             E_PH = E_PH + PHsttsE
 
-                            ckeyPH%vals = &
-                            [keylistPH(i,k,m,1),keylistPH(i,k,m,2),keylistPH(i,k,m,3),&
-                            keylistPH(i,k,m,4),keylistPH(i,k,m,5),keylistPH(i,k,m,6)]
+                            ! ckeyPH%vals = &
+                            ! [keylistPH(i,k,m,1),keylistPH(i,k,m,2),keylistPH(i,k,m,3),&
+                            ! keylistPH(i,k,m,4),keylistPH(i,k,m,5),keylistPH(i,k,m,6)]
 
                             do n=1,numOmPHM
 
-                                ckeyPHM%vals = &
-                                [keylistPHM(j,l,n,1),keylistPHM(j,l,n,2),keylistPHM(j,l,n,3), &
-                                keylistPHM(j,l,n,4),keylistPHM(j,l,n,5),keylistPHM(j,l,n,6)]
+                                ! ckeyPHM%vals = &
+                                ! [keylistPHM(j,l,n,1),keylistPHM(j,l,n,2),keylistPHM(j,l,n,3), &
+                                ! keylistPHM(j,l,n,4),keylistPHM(j,l,n,5),keylistPHM(j,l,n,6)]
 
-                                dkey%vals = [indexPH(i,k,m,3),indexPHM(j,l,n,3)]
+                                dkey%vals = [keylistPH(i,k,m,2),keylistPHM(j,l,n,2)]
                                 
-                                idxPH = find_coef_index(coefPH, nvib, ckeyPH)
-                                idxPHM = find_coef_index(coefPHM, nvib, ckeyPHM)
+                                ! idxPH = find_coef_index(coefPH, nvib, ckeyPH)
+                                ! idxPHM = find_coef_index(coefPHM, nvib, ckeyPHM)
+                                ! print*,idxPH,idxPHM,ckeyPH%vals,ckeyPHM%vals
                                 if (idxPH == 0 .or. idxPHM == 0) cycle
 
                                 coef_ini => coefPH(idxPH)%val
                                 coef_fin => coefPHM(idxPHM)%val
                                 
                                 idxD = find_dys_index(dysondict, ndys, dkey)
-                                if (idxD < 0) stop
+                                if (idxD < 0) cycle
                                 sigma_r => dysondict(idxD)%val
 
                                 print*,"B"

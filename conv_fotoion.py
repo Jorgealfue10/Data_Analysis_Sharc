@@ -1,201 +1,106 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import os ; import re
-from astropy.convolution import Gaussian1DKernel, convolve
-from scipy.signal import find_peaks
-from scipy.interpolate import interp1d
 import argparse
 
-def convolve_spectrum(evals,relInt,dE,sigma_eV,emin=None,emax=None,normalize=False):
+# --------------------------------------------------
+# PERFILES
+# --------------------------------------------------
 
-    energies = evals.flatten()
-    intensities = relInt.flatten()
+def gaussian_profile(E, E0, sigma, I):
+    return I * np.exp(-(E - E0)**2 / (2 * sigma**2))
 
-    if emin is None: emin = np.min(energies)
-    if emax is None: emax = np.max(energies)
 
-    E_grid = np.arange(emin, emax, dE)
+def lorentzian_profile(E, E0, gamma, I):
+    # Normalizada en área
+    return I * (gamma / np.pi) / ((E - E0)**2 + gamma**2)
+
+
+# --------------------------------------------------
+# ESPECTRO GENERAL
+# --------------------------------------------------
+
+def build_spectrum(evals, intensities, E_grid, width, kind="gaussian", normalize=False):
+
+    evals = np.asarray(evals).flatten()
+    intensities = np.asarray(intensities).flatten()
+
     spectrum = np.zeros_like(E_grid)
 
-    for E_k, I_k in zip(energies, intensities):
-        idx = np.abs(E_grid - E_k) <= dE
-        spectrum[idx] += I_k
+    if kind == "gaussian":
+        for E0, I0 in zip(evals, intensities):
+            spectrum += gaussian_profile(E_grid, E0, width, I0)
 
-    sigma_bins = sigma_eV / dE
-    bins = np.append(E_grid, E_grid[-1] + dE)
+    elif kind == "lorentzian":
+        for E0, I0 in zip(evals, intensities):
+            spectrum += lorentzian_profile(E_grid, E0, width, I0)
 
-    # spectrum, _ = np.histogram(
-    #     energies, 
-    #     bins=bins, 
-    #     weights=intensities
-    # )
-
-    kernel = Gaussian1DKernel(sigma_bins)
-    spectrum_conv = convolve(spectrum, kernel, normalize_kernel=True, boundary='extend')
-
-    if normalize:
-        spectrum_conv = spectrum_conv / np.max(spectrum_conv)
-        spectrum = spectrum / np.max(spectrum)
-
-    return E_grid, spectrum, spectrum_conv
-
-def upper_envelope(E, spectrum):
-
-    peaks, _ = find_peaks(spectrum)
-
-    E_peaks = E[peaks]
-    I_peaks = spectrum[peaks]
-
-    f = interp1d(E_peaks, I_peaks, kind='cubic', fill_value="extrapolate")
-
-    envelope = f(E)
-
-    return envelope
-
-
-def lorentzian(E, E0, gamma, I):
-    return I * (gamma**2 / ((E - E0)**2 + gamma**2))
-
-def spectrum_lorentzian(evals, relInt, dE, gamma, emin=None, emax=None, normalize=False):
-
-    energies = evals.flatten()
-    intensities = relInt.flatten()
-
-    if emin is None:
-        emin = np.min(energies)
-
-    if emax is None:
-        emax = np.max(energies)
-
-    # grilla de energía
-    E_grid = np.arange(emin, emax, dE)
-
-    # guardar cada lorentziana
-    lorentzians = []
-
-    for Ek, Ik in zip(energies, intensities):
-
-        L = lorentzian(E_grid, Ek, gamma, Ik)
-        lorentzians.append(L)
-
-    lorentzians = np.array(lorentzians)
-
-    # sumar todas
-    spectrum = np.sum(lorentzians, axis=0)
+    else:
+        raise ValueError("kind must be 'gaussian' or 'lorentzian'")
 
     if normalize:
         spectrum /= np.max(spectrum)
-
-    return E_grid, spectrum, lorentzians
-
-def gaussian(E, E0, sigma, I):
-    check = False
-    for i in range(len(E)):
-        if abs(E[i] - E0) < 1e-4 and check == False:
-            E[i] = E0
-            check = True
-    return I * np.exp(-((E - E0)**2) / (2 * sigma**2))
-
-def spectrum_gaussian(evals, relInt, dE, sigma, emin=None, emax=None, normalize=False):
-
-    energies = evals.flatten()
-    intensities = relInt.flatten()
-
-    if emin is None:
-        emin = np.min(energies)
-
-    if emax is None:
-        emax = np.max(energies)
-
-    # grilla de energía
-    E_grid = np.arange(emin, emax, dE)
-
-    # guardar cada lorentziana
-    gaussians = []
-
-    for Ek, Ik in zip(energies, intensities):
-
-        G = gaussian(E_grid, Ek, sigma, Ik)
-        gaussians.append(G)
-
-    gaussians = np.array(gaussians)
-
-    # sumar todas
-    spectrum = np.sum(gaussians, axis=0)
-
-    if normalize:
-        spectrum /= np.max(spectrum)
-
-    return E_grid, spectrum, gaussians
-
-def lorentzian_spectrum_on_grid(evals, relInt, E_grid, gamma):
-    energies = np.asarray(evals).flatten()
-    intensities = np.asarray(relInt).flatten()
-
-    spectrum = np.zeros_like(E_grid, dtype=float)
-
-    for Ek, Ik in zip(energies, intensities):
-        spectrum += Ik * gamma**2 / ((E_grid - Ek)**2 + gamma**2)
 
     return spectrum
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Script to convolve a spectrum'
-    )
 
-    parser.add_argument('-i', '--input', type=str, help='Input file')
-    parser.add_argument('-o', '--output', type=str, help='Output file')
-    parser.add_argument('--emin', type=float, default=None, help='Minimum energy')
-    parser.add_argument('--emax', type=float, default=None, help='Maximum energy')
-    parser.add_argument('--dE', type=float, default=0.01, help='Energy step')
-    parser.add_argument('--sigma_eV', type=float, default=0.1, help='Sigma in eV')
-    parser.add_argument('-N', '--normalize', action='store_true', help='Normalize spectrum')
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(description="Spectrum convolution (clean version)")
+
+    parser.add_argument("-i", "--input", type=str, required=True)
+    parser.add_argument("-o", "--output", type=str, required=True)
+
+    parser.add_argument("--emin", type=float, default=None)
+    parser.add_argument("--emax", type=float, default=None)
+    parser.add_argument("--dE", type=float, default=0.005)
+
+    parser.add_argument("--width", type=float, default=0.05,
+                        help="sigma (Gaussian) or gamma (Lorentzian) in eV")
+
+    parser.add_argument("--kind", type=str, default="gaussian",
+                        choices=["gaussian", "lorentzian"])
+
+    parser.add_argument("-N", "--normalize", action="store_true")
 
     args = parser.parse_args()
 
-    fileinp = args.input
-    fileout = args.output
-    emin = args.emin
-    emax = args.emax
-    dE = args.dE
-    sigma_eV = args.sigma_eV
-    if args.normalize:
-        normalize = True
-    else:
-        normalize = False
-    
-    E_grid = np.arange(emin, emax, dE)
+    # ----------------------------------------------
+    # Leer datos
+    # ----------------------------------------------
+    data = np.loadtxt(args.input, skiprows=1)
 
-    data = np.loadtxt(fileinp, skiprows=1)
-    vN,JN,mN,sigmaN,LN,pN,IndN,vC,JC,mC,sigmaC,LC,pC,IndC,evals,relInt = data.T
+    # últimas dos columnas = energía + intensidad
+    evals = data[:, -2]
+    intensities = data[:, -1]
 
-    dV = vC - vN
-    dJ = JC - JN
+    # ----------------------------------------------
+    # Grid de energía
+    # ----------------------------------------------
+    emin = args.emin if args.emin is not None else np.min(evals)
+    emax = args.emax if args.emax is not None else np.max(evals)
 
-    spectra_dVdJ = {}
+    E_grid = np.arange(emin, emax, args.dE)
 
-    for dv, dj in sorted(set(zip(dV, dJ))):
-        mask = (dV == dv) & (dJ == dj)
-        spectra_dVdJ[(dv, dj)] = lorentzian_spectrum_on_grid(evals[mask], relInt[mask], E_grid, sigma_eV)
+    # ----------------------------------------------
+    # Construir espectro
+    # ----------------------------------------------
+    spectrum = build_spectrum(
+        evals,
+        intensities,
+        E_grid,
+        width=args.width,
+        kind=args.kind,
+        normalize=args.normalize
+    )
 
-    cols = [E_grid]#, spec_total]
-    header = ["E"]#, "total"]
-
-    for dv, dj in sorted(spectra_dVdJ):
-        cols.append(spectra_dVdJ[(dv, dj)])
-        header.append(f"dV={dv}_dJ={dj}")
-
-    data = np.column_stack(cols)
-    np.savetxt(fileout, data, header=" ".join(header))
-
-    # E_grid, spectrum, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
-    # E_grid, spectrum, spectrum_conv = convolve_spectrum(evals,relInt,dE,sigma_eV,emin,emax,normalize)
-    # E, spec, lorentzians = spectrum_lorentzian(evals, relInt, dE, sigma_eV, emin, emax, normalize)
-    # E, spec, gaussians = spectrum_gaussian(evals, relInt, dE, sigma_eV, emin, emax, normalize)
-    # np.savetxt(fileout, np.column_stack((E_grid, envelope, spectrum, spectrum_conv)))
-    # np.savetxt(fileout, np.column_stack((E,spec)))
+    # ----------------------------------------------
+    # Guardar
+    # ----------------------------------------------
+    np.savetxt(args.output, np.column_stack((E_grid, spectrum)),
+            header="Energy(eV) Intensity")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

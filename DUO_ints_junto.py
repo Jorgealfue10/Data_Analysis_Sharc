@@ -151,6 +151,19 @@ def vib_normf(T, Jener, ZPE, Estt, numvib:int, numJ:int, Projs:int, index):
 
     return Q
 
+def vibNew(T,vibE,numvib:int, ZPE:float):
+    Eh_to_cm = 219474.6
+    kb = 3.166811563e-6  # Eh/K
+
+    Emin = (np.min(vibE))/Eh_to_cm
+    Q = 0.0
+    for i in range(numvib):
+        Ei = vibE[i]/Eh_to_cm
+        Ei_rel = Ei - Emin
+        Q += np.exp(-Ei_rel/(kb*T))
+
+    return Q
+
 #-------------------------------------------------------------------------------#
 #Get Evals by Vib, J, Omega, Sigma, Lambda 
 #-------------------------------------------------------------------------------#
@@ -317,7 +330,12 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
     relInt = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
     evals = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
 
-    normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+    v0vals = np.loadtxt(J0vEPHf,skiprows=3,usecols=1)
+    v0valsM = np.loadtxt(J0vEPHMf,skiprows=3,usecols=1)
+
+    normPHvib = vibNew(Tvib,v0vals,numvibPH)
+
+    # normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
     normPHrot = rot_normf(Trot,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
 
     djlist = []
@@ -338,9 +356,10 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
                 for l in range(numJPHM):
                     for m in range(numOmPH):
 
-                        PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
-                        evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
-                        degvi = (np.exp(-evib/(3.166811563*10**(-6)*Tvib)))/normPHvib
+                        PHv = v0vals[i]/Eh_to_cm
+                        # PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
+                        # evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
+                        degvi = (np.exp(-PHv/(3.166811563*10**(-6)*Tvib)))/normPHvib
                         PHv += PHsttsE
 
                         PHsumOmega = (PHener[i,k,m]+ZPEPH)/Eh_to_cm
@@ -381,7 +400,7 @@ def intT_sep(PHener,PHMener,dysmat,PHvibs,PHMvibs,mask,Tvib,Trot,
 #Make intensity matrix including Dyson splines as a function of sigma combs
 #-------------------------------------------------------------------------------#
 
-def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
+def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
                 ZPEPH,ZPEPHM,PHsttsE,PHMsttsE,DJ:int,
                 numvibPH:int,numvibPHM:int,numJPH:int,numJPHM:int,
                 numOmPH:int,numOmPHM:int,indexPH,indexPHM,
@@ -396,7 +415,12 @@ def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
     relInt = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
     evals = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
 
-    normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+    v0vals = np.loadtxt(J0vEPHf,skiprows=3,usecols=1)
+    v0valsM = np.loadtxt(J0vEPHMf,skiprows=3,usecols=1)
+
+    normPHvib = vibNew(Tvib,v0vals,numvibPH,ZPEPH)
+
+    # normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
     normPHrot = rot_normf(Trot,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
 
     djlist = []
@@ -417,9 +441,11 @@ def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
                 for l in range(numJPHM):
                     for m in range(numOmPH):
 
-                        PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
-                        evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
-                        degvi = (np.exp(-evib/(3.166811563*10**(-6)*Tvib)))/normPHvib
+                        PHv = (v0vals[i])/Eh_to_cm
+                        v0min = (np.min(v0vals[:]))/Eh_to_cm
+                        # PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
+                        # evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
+                        degvi = (np.exp(-(PHv-v0min)/(3.166811563*10**(-6)*Tvib)))/normPHvib
                         PHv += PHsttsE
 
                         PHsumOmega = (PHener[i,k,m]+ZPEPH)/Eh_to_cm
@@ -461,7 +487,8 @@ def intT_sigma(PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mask,Tvib,Trot,
                                             continue    
                                         # rotcoeff += W3_exp(Jival,DJ,Jfval,indexPH[i,k,m,2],djom,indexPHM[j,l,n,2])
                                         rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
-                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*diff*((rotcoeff)*abs(bk_val))**2)
+                            # relInt[i,j,k,l,m,n] = abs(degvi*degJi*diff*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
+                            relInt[i,j,k,l,m,n] = abs(degvi*degJi*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
                             # relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
     return evals,relInt
@@ -670,10 +697,13 @@ def main():
 
     print("Calculating intensities")
 
+    fileN = dsysn+"J0_vibrational_energies.dat"
+    fileC = dsysc+"J0_vibrational_energies.dat"
+
     if len(DJvals) > 1:
         for DJval in DJvals:
             print("DJ = ",DJval)
-            evals,relInt = intT_sigma(Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+            evals,relInt = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                                 ZPEn,ZPEc,Etotn,Etotc,DJval,
                                 numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                                 indexlsn,indexlsc,keysn,keysc,coefn,coefc)
@@ -686,7 +716,7 @@ def main():
                                 evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
         print("----------------------------------------------------------------")
     else:
-        evals,relInt = intT_sigma(Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+        evals,relInt = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                     ZPEn,ZPEc,Etotn,Etotc,DJval,
                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                     indexlsn,indexlsc,keysn,keysc,coefn,coefc)
