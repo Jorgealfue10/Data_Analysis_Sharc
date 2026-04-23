@@ -443,8 +443,6 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
 
                         PHv = (v0vals[i])/Eh_to_cm
                         v0min = (np.min(v0vals[:]))/Eh_to_cm
-                        # PHv = (PHener[i,0,0]+ZPEPH)/Eh_to_cm
-                        # evib = PHv - ((np.min(PHener[:,0,0]) + ZPEPH)/Eh_to_cm)
                         degvi = (np.exp(-(PHv-v0min)/(3.166811563*10**(-6)*Tvib)))/normPHvib
                         PHv += PHsttsE
 
@@ -485,11 +483,8 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                                     if -djJ <= djom and djom <= djJ:
                                         if not abs(OmN + OmC - djom) < 1e-10:
                                             continue    
-                                        # rotcoeff += W3_exp(Jival,DJ,Jfval,indexPH[i,k,m,2],djom,indexPHM[j,l,n,2])
                                         rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
-                            # relInt[i,j,k,l,m,n] = abs(degvi*degJi*diff*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
                             relInt[i,j,k,l,m,n] = abs(degvi*degJi*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
-                            # relInt[i,j,k,l,m,n] = abs(degvi*degJi*((rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
     return evals,relInt
 
@@ -595,7 +590,7 @@ def main():
 
     parser.add_argument("-Nvib", "--numvib", type=int, nargs=2, help="Número de vibracionales sistema neutro y catiónico")
     parser.add_argument("-NJ", "--numJ", type=int, nargs=2,help="Número de J sistema neutroy y catiónico")
-    parser.add_argument("-mult", type=int, nargs=2, help="Multiplicidad sistema Neutroy y catiónico")
+    parser.add_argument("-mult", type=int, nargs=2, help="Multiplicidad sistema Neutro y catiónico")
     parser.add_argument("-Lval", type=int, nargs=2, help="Valores Lambda sistema Neutro y Catiónico")
 
     parser.add_argument("-maskR", type=float, nargs=2, help="Rango de distancias")
@@ -716,6 +711,7 @@ def main():
                                 evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
         print("----------------------------------------------------------------")
     else:
+        DJval = DJvals[0]
         evals,relInt = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                     ZPEn,ZPEc,Etotn,Etotc,DJval,
                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
