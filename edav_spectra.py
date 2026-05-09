@@ -12,7 +12,7 @@ e_mat = getE(data, total_stts)
 tmx,tmy,tmz = read_tm(data, total_stts)
 dyson = read_Dyson(data, total_stts)
 
-write_energy_differences(eq_values, prefix='energy_diff')
+# write_energy_differences(eq_values, prefix='energy_diff')
 dyson = np.array(dyson)
 # write_SOC_diffs_withInt(energias_SO, dyson, prefix='soc_diff')
 

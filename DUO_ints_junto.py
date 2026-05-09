@@ -100,31 +100,42 @@ def bk_Coeff(vib_ini, vib_fin, dymat, coef_ini, coef_fin):
 # Get normalization factor Q(T) rotational levels including Projs
 #-------------------------------------------------------------------------------#
 
-def rot_normf(T, Jener, ZPE, Estt, numvib:int, numJ:int, Projs:int, index):
+def rot_normf(T, Jener, numvib, numJ, Projs, index):
 
     Eh_to_cm = 219474.6
     kb = 3.166811563e-6  # Eh/K
 
-    # calcular Emin global coherente
-    Emin = 1e99
+    Evib_min = np.full(numvib, np.inf)
+
     for i in range(numvib):
         for j in range(numJ):
             for k in range(Projs):
-                Ei = (Jener[i,j,k] + ZPE)/Eh_to_cm + Estt
-                if Ei < Emin:
-                    Emin = Ei
 
-    # construir Q(T)
-    Q = np.zeros((numvib))
+                if abs(index[i, j, k, 0] - i) > 1e-5:
+                    continue
+
+                Ei = Jener[i, j, k] / Eh_to_cm
+
+                if Ei < Evib_min[i]:
+                    Evib_min[i] = Ei
+
+    Qrot = np.zeros(numvib)
+
     for i in range(numvib):
         for j in range(numJ):
             for k in range(Projs):
-                Ei = (Jener[i,j,k] + ZPE)/Eh_to_cm + Estt
-                Ei_rel = Ei - Emin
-                jval=index[i][j][k][1]
-                Q[i] += (2*jval+1) * np.exp(-Ei_rel/(kb*T))
 
-    return Q
+                if abs(index[i, j, k, 0] - i) > 1e-5:
+                    continue
+
+                Ei = Jener[i, j, k] / Eh_to_cm
+                Ei_rel = Ei - Evib_min[i]
+
+                jval = index[i, j, k, 1]
+
+                Qrot[i] += (2*jval + 1) * np.exp(-Ei_rel / (kb*T))
+
+    return Qrot, Evib_min
 
 #-------------------------------------------------------------------------------#
 # Get normalization factor Q(T) vibrational levels including Projs
@@ -200,7 +211,7 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
         
         if vibn < nvib:
             # print(line)
-            # print(i,vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p)
+            # print("Read rovibr ",i,vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p)
             Jvals[vibn,jn,midx] = float(parts[2])
             index_list[vibn,jn,midx,:] = vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [0] Vib, [1] J, [2] m, [3] Sigma, [4] Lambda, [5] Parity, [6] Index
             key_dict[vibn,jn,midx,:] = float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [1] J, [2] m, [3] S, [4] Lambda, [5] Parity, [6] Index
@@ -414,14 +425,19 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
     # dyspline = dyspline[mask] ; dyspline = dyspline[:,mask]
     relInt = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
     evals = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
+    bk_vals = np.zeros_like(relInt)
+    Eini = np.zeros_like(relInt)
+    Efin = np.zeros_like(relInt)
 
-    v0vals = np.loadtxt(J0vEPHf,skiprows=3,usecols=1)
-    v0valsM = np.loadtxt(J0vEPHMf,skiprows=3,usecols=1)
+    if Tvib is not None:
+        v0vals = np.loadtxt(J0vEPHf,skiprows=3,usecols=1)
+        v0valsM = np.loadtxt(J0vEPHMf,skiprows=3,usecols=1)
 
-    normPHvib = vibNew(Tvib,v0vals,numvibPH,ZPEPH)
+        normPHvib = vibNew(Tvib,v0vals,numvibPH,ZPEPH)
 
-    # normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
-    normPHrot = rot_normf(Trot,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+    if Trot is not None:    
+        # normPHvib = vib_normf(Tvib,PHener,ZPEPH,PHsttsE,numvibPH,numJPH,numOmPH,indexPH)
+        normPHrot,PHrot_min = rot_normf(Trot,PHener,numvibPH,numJPH,numOmPH,indexPH)
 
     djlist = []
     initdj = -DJ
@@ -441,24 +457,33 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                 for l in range(numJPHM):
                     for m in range(numOmPH):
 
-                        PHv = (v0vals[i])/Eh_to_cm
-                        v0min = (np.min(v0vals[:]))/Eh_to_cm
-                        degvi = (np.exp(-(PHv-v0min)/(3.166811563*10**(-6)*Tvib)))/normPHvib
-                        PHv += PHsttsE
+                        if abs(indexPH[i,k,m,0] - i) > 1.e-5:
+                            continue
+                    
+                        if Tvib is not None:
+                            PHv = (v0vals[i])/Eh_to_cm
+                            v0min = (np.min(v0vals[:]))/Eh_to_cm
+                            degvi = (np.exp(-(PHv-v0min)/(3.166811563*10**(-6)*Tvib)))/normPHvib
+                        else:
+                            degvi = 1.0
 
-                        PHsumOmega = (PHener[i,k,m]+ZPEPH)/Eh_to_cm
-                        eboltz = PHsumOmega - ((np.min(PHener[i,:,:]) + ZPEPH)/Eh_to_cm)
+                        PHsumOmega = (PHener[i,k,m])/Eh_to_cm
                         Jival=indexPH[i,k,m,1] ; OmN = indexPH[i,k,m,2]
-                        degJi = ((2*Jival+1)*np.exp(-eboltz/(3.166811563*10**(-6)*Trot)))/normPHrot[i]
-                        PHsumOmega += PHsttsE
+                        if Trot is not None:
+                            eboltz = PHsumOmega - PHrot_min[i]
+                            degJi = ((2*Jival+1)*np.exp(-eboltz/(3.166811563*10**(-6)*Trot)))/normPHrot[i]
+                        else:
+                            degJi = 1.0
+
+                        PHsumOmega += PHsttsE + (ZPEPH/Eh_to_cm)
 
                         for n in range(numOmPHM):
 
                             keyPH_i = tuple(np.array(keyPH[i,k,m,:])) ; keyPHM_j = tuple(np.array(keyPHM[j,l,n,:]))
                             
-                            keydyson = (keyPH[i,k,m,2],keyPHM[j,l,n,2])
+                            keydyson = (indexPH[i,k,m,2],indexPHM[j,l,n,2])
                             if keydyson not in dyspline.keys():
-                                # print("WOWOWOW")
+                                # print(keydyson)
                                 continue
                             
                             dyspl = dyspline[keydyson](rvals)
@@ -482,11 +507,17 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                                 for djom in djlist:
                                     if -djJ <= djom and djom <= djJ:
                                         if not abs(OmN + OmC - djom) < 1e-10:
-                                            continue    
+                                            continue   
                                         rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
+                            # print("<ph|dys|phm>",i,j,indexPH[i,k,m,0],indexPH[j,l,n,1],bk_val,rotcoeff,degvi,degJi)
                             relInt[i,j,k,l,m,n] = abs(degvi*degJi*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
+                            # relInt[i,j,k,l,m,n] = abs((((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
-    return evals,relInt
+                            bk_vals[i,j,k,l,m,n] = bk_val
+                            Eini[i,j,k,l,m,n] = PHsumOmega
+                            Efin[i,j,k,l,m,n] = PHMsumOmega
+    
+    return evals,relInt,Eini,Efin,bk_vals
 
 #-------------------------------------------------------------------------------#
 #Write files
@@ -543,6 +574,120 @@ def dump_spectrum_long(filename, evals, relInt, index_listPH, index_listPHM,
 
                                 f.write(f"{E: .10f} {I: .10f} \n")
 
+
+def dump_spectrum_long_v2(
+        filename,
+        evals,
+        relInt,
+        Eini,
+        Efin,
+        bk_vals,
+        index_listPH,
+        index_listPHM,
+        energy_unit="eV",
+        tol_I=0.0):
+
+    if evals.shape != relInt.shape:
+        raise ValueError(
+            f"evals.shape {evals.shape} != relInt.shape {relInt.shape}"
+        )
+
+    if evals.ndim != 6:
+        raise ValueError(
+            f"Esperaba evals 6D, pero evals.ndim={evals.ndim}"
+        )
+
+    nvPH, nvPHM, nJPH, nJPHM, nOmPH, nOmPHM = evals.shape
+
+    Eh_to_eV = 27.2114
+    Eh_to_cm = 219474.63
+
+    # ---------------------------------------------------------
+    # Write
+    # ---------------------------------------------------------
+
+    with open(filename, "w") as f:
+
+        f.write(
+            "# "
+            "vPH JPH OmPH SigmaPH LambdaPH ParityPH IndexPH "
+            "vPHM JPHM OmPHM SigmaPHM LambdaPHM ParityPHM IndexPHM "
+            f"Ei({energy_unit}) "
+            f"Ef({energy_unit}) "
+            f"DeltaE({energy_unit}) "
+            "Intensity "
+            "bk \n"
+        )
+
+        for i in range(nvPH):
+            for j in range(nvPHM):
+                for k in range(nJPH):
+                    for l in range(nJPHM):
+                        for m in range(nOmPH):
+                            for n in range(nOmPHM):
+
+                                I = relInt[i,j,k,l,m,n]
+                                bk = bk_vals[i,j,k,l,m,n]
+
+                                if I <= tol_I:
+                                    continue
+
+                                # -------------------------------------------------
+                                # Energías
+                                # -------------------------------------------------
+
+                                Ei = Eini[i,j,k,l,m,n]
+                                Ef = Efin[i,j,k,l,m,n]
+                                dE = evals[i,j,k,l,m,n]
+
+                                # -------------------------------------------------
+                                # Conversión unidades
+                                # -------------------------------------------------
+
+                                if energy_unit == "eV":
+
+                                    Ei *= Eh_to_eV
+                                    Ef *= Eh_to_eV
+                                    dE *= Eh_to_eV
+
+                                elif energy_unit == "cm^-1":
+
+                                    Ei *= Eh_to_cm
+                                    Ef *= Eh_to_cm
+                                    dE *= Eh_to_cm
+
+                                # -------------------------------------------------
+                                # Índices cuánticos
+                                # -------------------------------------------------
+
+                                idxPH  = index_listPH[i,k,m,:]
+                                idxPHM = index_listPHM[j,l,n,:]
+
+                                # -------------------------------------------------
+                                # Write PH
+                                # -------------------------------------------------
+
+                                for idx in idxPH:
+                                    f.write(f"{idx:.2f}  ")
+
+                                # -------------------------------------------------
+                                # Write PHM
+                                # -------------------------------------------------
+
+                                for idx in idxPHM:
+                                    f.write(f"{idx:.2f}  ")
+
+                                # -------------------------------------------------
+                                # Write energies + intensity
+                                # -------------------------------------------------
+
+                                f.write(
+                                    f"{Ei:.10f}  "
+                                    f"{Ef:.10f}  "
+                                    f"{dE:.10f}  "
+                                    f"{I:.10e}   "
+                                    f"{bk:.10e} \n"
+                                )
 #-------------------------------------------------------------------------------#
 #Read Dyson values by sigma combination
 #-------------------------------------------------------------------------------#
@@ -557,7 +702,7 @@ def read_dys_bySigma(d1,d2,pathtody):
 
             key = (sigma_i,sigma_j)
             r,dyson = np.loadtxt(pathtody+f"/dyson_{i:02d}_{j:02d}.dat",unpack=True)
-
+            print(key,dyson,pathtody+f"/dyson_{i:02d}_{j:02d}.dat")
             if sigma_dyson[key] is None:
                 sigma_dyson[key] = (dyson.copy())**2
                 # print("First time")
@@ -578,11 +723,12 @@ def read_dys_bySigma(d1,d2,pathtody):
 #Main
 #-------------------------------------------------------------------------------#
 def main():
+    
     parser = argparse.ArgumentParser(
         description="Calcula valores de intensidad de espectro de fotoionización entre niveles rovibracionales."
     )
-    parser.add_argument("-Tr", "--Trot", type=float, default=300.0, help="Temperatura rotacional en K")
-    parser.add_argument("-Tv", "--Tvib", type=float, default=300.0, help="Temperatura vibracional en K")
+    parser.add_argument("-Tr", "--Trot", type=float, default=None, help="Temperatura rotacional en K")
+    parser.add_argument("-Tv", "--Tvib", type=float, default=None, help="Temperatura vibracional en K")
     parser.add_argument("-ZPE", type=float, nargs=2, help="ZPE vibracional Sistema Neutro y catiónico (cm^-1)")
     parser.add_argument("-Etot", type=float, nargs=2, help="Energía total Sistema Neutro y Catiónico (Eh)")
     parser.add_argument("-nVJtot", type=int, nargs=2, help="Número de vibracionales y J totales Sistema Neutro y Catiónico")
@@ -650,13 +796,14 @@ def main():
             14: 1
         },
         "PHa1D": {
-            1: 0
+            1: 2.0,
+            # 1: -2.0
         },
         "PHMX2P": {
-            2: -0.5,
+            2: -1.5,
             3: -0.5,
             7: 0.5,
-            8: 0.5
+            8: 1.5
         },
         "PHMa4Sm": {
             15: -1.5,
@@ -665,10 +812,10 @@ def main():
             18: 1.5
         },
         "PHMA2D": {
-            5: -0.5,
-            6: -0.5,
-            10: 0.5,
-            11: 0.5
+            5: -2.5,
+            6: -1.5,
+            10: 1.5,
+            11: 2.5
         },
         "PHM12Sm": {
             4: -0.5,
@@ -695,31 +842,50 @@ def main():
     fileN = dsysn+"J0_vibrational_energies.dat"
     fileC = dsysc+"J0_vibrational_energies.dat"
 
-    if len(DJvals) > 1:
-        for DJval in DJvals:
-            print("DJ = ",DJval)
-            evals,relInt = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
-                                ZPEn,ZPEc,Etotn,Etotc,DJval,
-                                numvibn,numvibc,numJn,numJc,nOmn,nOmc,
-                                indexlsn,indexlsc,keysn,keysc,coefn,coefc)
-            # evals,relInt = intT_sep(Jenern,Jenerc,dysmat,vibsn,vibsc,mask,Tvib,Trot,
-            #                     ZPEn,ZPEc,Etotn,Etotc,DJval,
-            #                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
-            #                     indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+    if Tvib is not None and Trot is not None:
+        if len(DJvals) > 1:
+            for DJval in DJvals:
+                print("DJ = ",DJval)
+                evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                                    ZPEn,ZPEc,Etotn,Etotc,DJval,
+                                    numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                                    indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
-            dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
-                                evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
-        print("----------------------------------------------------------------")
+                dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
+                                    evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+            print("----------------------------------------------------------------")
+        else:
+            DJval = DJvals[0]
+            evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                        ZPEn,ZPEc,Etotn,Etotc,DJval,
+                        numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                        indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+
+            dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
+                                evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+            print("----------------------------------------------------------------")
     else:
-        DJval = DJvals[0]
-        evals,relInt = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
-                    ZPEn,ZPEc,Etotn,Etotc,DJval,
-                    numvibn,numvibc,numJn,numJc,nOmn,nOmc,
-                    indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+        if len(DJvals) > 1:
+            for DJval in DJvals:
+                print("DJ = ",DJval)
+                evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                                    ZPEn,ZPEc,Etotn,Etotc,DJval,
+                                    numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                                    indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
-        dump_spectrum_long(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
-                            evals,relInt,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
-        print("----------------------------------------------------------------")
+                dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/"+str(sttN)+str(sttC)+".dat",
+                                    evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+            print("----------------------------------------------------------------")
+        else:
+            DJval = DJvals[0]
+            evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                        ZPEn,ZPEc,Etotn,Etotc,DJval,
+                        numvibn,numvibc,numJn,numJc,nOmn,nOmc,
+                        indexlsn,indexlsc,keysn,keysc,coefn,coefc)
+
+            dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/"+str(sttN)+str(sttC)+".dat",
+                                evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+            print("----------------------------------------------------------------")
 
 if __name__ == "__main__":
     main()
