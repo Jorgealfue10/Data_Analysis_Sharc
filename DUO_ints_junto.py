@@ -202,6 +202,14 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
         #Getting indexes for J projections
         mval = float(parts[8])
         midx = int(np.floor(mval+S))
+        midx = int(round(mval + nLambda + S))
+
+        if midx < 0 or midx >= nOmega:
+            raise ValueError(
+                f"Bad Omega index in {fname}: "
+                f"v={vibn}, J={parts[0]}, Omega={mval}, "
+                f"S={S}, Lambda={nLambda}, midx={midx}, nOmega={nOmega}"
+            )
 
         pm = parts[9]
         if pm == '-':
@@ -214,6 +222,8 @@ def getJvals_compInd(fname:str, nvib: int, nj: int, mult: int, nLambda:int):
             # print("Read rovibr ",i,vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p)
             Jvals[vibn,jn,midx] = float(parts[2])
             index_list[vibn,jn,midx,:] = vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [0] Vib, [1] J, [2] m, [3] Sigma, [4] Lambda, [5] Parity, [6] Index
+            # if int(parts[1]) == 1:
+            #     print(int(parts[1]),vibn,float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p)
             key_dict[vibn,jn,midx,:] = float(parts[0]),float(parts[8]),float(parts[7]),float(parts[5]),p,int(parts[1]) # [1] J, [2] m, [3] S, [4] Lambda, [5] Parity, [6] Index
             # print(key_dict[vibn,jn,midx,:],index_list[vibn,jn,midx,:])
 
@@ -425,6 +435,7 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
     # dyspline = dyspline[mask] ; dyspline = dyspline[:,mask]
     relInt = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
     evals = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
+    rotcoeffs = np.zeros((numvibPH,numvibPHM,numJPH,numJPHM,numOmPH,numOmPHM))
     bk_vals = np.zeros_like(relInt)
     Eini = np.zeros_like(relInt)
     Efin = np.zeros_like(relInt)
@@ -457,8 +468,8 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                 for l in range(numJPHM):
                     for m in range(numOmPH):
 
-                        if abs(indexPH[i,k,m,0] - i) > 1.e-5:
-                            continue
+                        # if abs(indexPH[i,k,m,0] - i) > 1.e-5:
+                            # continue
                     
                         if Tvib is not None:
                             PHv = (v0vals[i])/Eh_to_cm
@@ -475,15 +486,23 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                         else:
                             degJi = 1.0
 
-                        PHsumOmega += PHsttsE + (ZPEPH/Eh_to_cm)
+                        # PHsumOmega += PHsttsE + (ZPEPH/Eh_to_cm)
 
                         for n in range(numOmPHM):
+                            
+                            if indexPH[i,k,m,-1] == 0:
+                                continue
+                            # if abs(indexPHM[j,l,n,0] - j) > 1.e-5:
+                                # continue
 
                             keyPH_i = tuple(np.array(keyPH[i,k,m,:])) ; keyPHM_j = tuple(np.array(keyPHM[j,l,n,:]))
                             
                             keydyson = (indexPH[i,k,m,2],indexPHM[j,l,n,2])
+                            
                             if keydyson not in dyspline.keys():
                                 # print(keydyson)
+                                if (indexPH[i,k,m,-1]) == 0:
+                                    print(indexPH[i,k,m,:])
                                 continue
                             
                             dyspl = dyspline[keydyson](rvals)
@@ -494,9 +513,19 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                             PHMsumOmega = ((PHMener[j,l,n])+ZPEPHM)/Eh_to_cm
                             PHMsumOmega += PHMsttsE
 
-                            diff = abs(PHsumOmega - PHMsumOmega)
+                            # diff = abs(PHsumOmega - PHMsumOmega)
 
                             Jfval=indexPHM[j,l,n,1] ; OmC = indexPHM[j,l,n,2]
+
+                            Ei_rel = (PHener[i,k,m] + ZPEPH) / Eh_to_cm
+                            Ef_rel = (PHMener[j,l,n] + ZPEPHM) / Eh_to_cm
+                            Ei_abs = PHsttsE + Ei_rel
+                            Ef_abs = PHMsttsE + Ef_rel
+
+                            diff = Ef_abs - Ei_abs
+
+                            if diff <= 0:
+                                continue
                             
                             rotcoeff = 0.0
                             for djJ in djlist:
@@ -509,15 +538,15 @@ def intT_sigma(J0vEPHf,J0vEPHMf,PHener,PHMener,rvals,dyspline,PHvibs,PHMvibs,mas
                                         if not abs(OmN + OmC - djom) < 1e-10:
                                             continue   
                                         rotcoeff += W3_exp(Jival,Jfval,djJ,indexPH[i,k,m,2],indexPHM[j,l,n,2],-djom)
-                            # print("<ph|dys|phm>",i,j,indexPH[i,k,m,0],indexPH[j,l,n,1],bk_val,rotcoeff,degvi,degJi)
+                            
                             relInt[i,j,k,l,m,n] = abs(degvi*degJi*(((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
-                            # relInt[i,j,k,l,m,n] = abs((((-1)**indexPH[i,k,m,2])*(rotcoeff)*abs(bk_val))**2)
                             evals[i,j,k,l,m,n] = diff
                             bk_vals[i,j,k,l,m,n] = bk_val
-                            Eini[i,j,k,l,m,n] = PHsumOmega
-                            Efin[i,j,k,l,m,n] = PHMsumOmega
+                            Eini[i,j,k,l,m,n] = Ei_rel
+                            Efin[i,j,k,l,m,n] = Ef_rel
+                            rotcoeffs[i,j,k,l,m,n] = rotcoeff
     
-    return evals,relInt,Eini,Efin,bk_vals
+    return evals,relInt,Eini,Efin,bk_vals,rotcoeffs
 
 #-------------------------------------------------------------------------------#
 #Write files
@@ -582,6 +611,7 @@ def dump_spectrum_long_v2(
         Eini,
         Efin,
         bk_vals,
+        rotcoeffs,
         index_listPH,
         index_listPHM,
         energy_unit="eV",
@@ -628,6 +658,7 @@ def dump_spectrum_long_v2(
 
                                 I = relInt[i,j,k,l,m,n]
                                 bk = bk_vals[i,j,k,l,m,n]
+                                rotcoeff = rotcoeffs[i,j,k,l,m,n]
 
                                 if I <= tol_I:
                                     continue
@@ -686,7 +717,8 @@ def dump_spectrum_long_v2(
                                     f"{Ef:.10f}  "
                                     f"{dE:.10f}  "
                                     f"{I:.10e}   "
-                                    f"{bk:.10e} \n"
+                                    f"{bk:.10e}  "
+                                    f"{rotcoeff:.10e} \n"
                                 )
 #-------------------------------------------------------------------------------#
 #Read Dyson values by sigma combination
@@ -796,8 +828,8 @@ def main():
             14: 1
         },
         "PHa1D": {
-            1: 2.0,
-            # 1: -2.0
+            # 1: 2.0,
+            1: -2.0
         },
         "PHMX2P": {
             2: -1.5,
@@ -846,45 +878,45 @@ def main():
         if len(DJvals) > 1:
             for DJval in DJvals:
                 print("DJ = ",DJval)
-                evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                evals,relInt,Eini,Efin,bk_vals,rotcoeffs = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                                     ZPEn,ZPEc,Etotn,Etotc,DJval,
                                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                                     indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
                 dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
-                                    evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+                                    evals,relInt,Eini,Efin,bk_vals,rotcoeffs,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
             print("----------------------------------------------------------------")
         else:
             DJval = DJvals[0]
-            evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+            evals,relInt,Eini,Efin,bk_vals,rotcoeffs = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                         ZPEn,ZPEc,Etotn,Etotc,DJval,
                         numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                         indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
             dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/Tv"+str(Tvib)+"_Tr"+str(Trot)+str(sttN)+str(sttC)+".dat",
-                                evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+                                evals,relInt,Eini,Efin,bk_vals,rotcoeffs,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
             print("----------------------------------------------------------------")
     else:
         if len(DJvals) > 1:
             for DJval in DJvals:
                 print("DJ = ",DJval)
-                evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+                evals,relInt,Eini,Efin,bk_vals,rotcoeffs = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                                     ZPEn,ZPEc,Etotn,Etotc,DJval,
                                     numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                                     indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
                 dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/"+str(sttN)+str(sttC)+".dat",
-                                    evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+                                    evals,relInt,Eini,Efin,bk_vals,rotcoeffs,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
             print("----------------------------------------------------------------")
         else:
             DJval = DJvals[0]
-            evals,relInt,Eini,Efin,bk_vals = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
+            evals,relInt,Eini,Efin,bk_vals,rotcoeffs = intT_sigma(fileN,fileC,Jenern,Jenerc,rvals_Comp,dyson_splines,vibsn,vibsc,mask,Tvib,Trot,
                         ZPEn,ZPEc,Etotn,Etotc,DJval,
                         numvibn,numvibc,numJn,numJc,nOmn,nOmc,
                         indexlsn,indexlsc,keysn,keysc,coefn,coefc)
 
             dump_spectrum_long_v2(pathor+"/DJ"+str(DJval)+"/"+str(sttN)+str(sttC)+".dat",
-                                evals,relInt,Eini,Efin,bk_vals,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
+                                evals,relInt,Eini,Efin,bk_vals,rotcoeffs,indexlsn,indexlsc,energy_unit="eV",tol_I=0.0)
             print("----------------------------------------------------------------")
 
 if __name__ == "__main__":
