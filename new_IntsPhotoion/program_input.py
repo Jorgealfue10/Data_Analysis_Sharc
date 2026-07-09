@@ -18,7 +18,7 @@ BOHR_TO_ANGSTROM = 0.529177210903
 
 
 # =============================================================================
-# DUO level object
+# Rovibrational level object from DUO
 # =============================================================================
 
 @dataclass(frozen=True)
@@ -33,6 +33,9 @@ class DuoLevel:
     duo_index: int
     energy_cm: float
 
+# =============================================================================
+# Coefficient object from DUO
+# =============================================================================
 
 @dataclass(frozen=True)
 class CoeffComponent:
@@ -42,28 +45,19 @@ class CoeffComponent:
     Sigma: float
     Omega: float
 
-
 # =============================================================================
 # Small utilities
 # =============================================================================
 
+# Change to list-type variable 
 def as_list(x):
     if isinstance(x, (list, tuple, np.ndarray)):
         return list(x)
     return [x]
 
 
+# Resolve system path and file. Check with directory and prefix-directory.
 def resolve_system_file(base_path, system, filename):
-    """
-    Accepts both directory-style and prefix-style inputs.
-
-    Directory style:
-        base/PHX3Sm/vibeigenvect_vib.chk
-
-    Prefix style:
-        base/PHX3Smvibeigenvect_vib.chk
-    """
-
     base_path = Path(base_path)
 
     candidate_dir = base_path / system / filename
@@ -80,15 +74,13 @@ def resolve_system_file(base_path, system, filename):
         f"  {candidate_prefix}"
     )
 
+# =============================================================================
+# System specific information
+# =============================================================================
 
+# Mapping dyson indexes to omega projections and electronic states of PH and PHm
+# TODO: making it for general system
 def build_dyson_index_to_omega():
-    """
-    Maps Dyson file indices to physical projections.
-
-    These indices are NOT DUO rovibronic level indices. They are the indices
-    appearing in filenames like dyson_12_02.dat.
-    """
-
     return {
         "PHX3Sm": {
             12: -1.0,
@@ -128,11 +120,11 @@ def build_dyson_index_to_omega():
         },
     }
 
-
 # =============================================================================
-# Vibrational eigenfunctions
+# Reading DUO-formatted files
 # =============================================================================
 
+# Reading vibrational eigenfunctions: header
 def is_head_eigenvib(line: str) -> bool:
     s = line.strip()
     if not s:
@@ -150,12 +142,8 @@ def is_head_eigenvib(line: str) -> bool:
 
     return True
 
-
+# Reading vibrational eigenfunctions: functions
 def parse_duo_vib_einfun(fname, npoints: int, nvib: int):
-    """
-    Parses DUO vibrational contracted eigenfunctions.
-    Returns an array with shape (npoints, nvib).
-    """
 
     fname = Path(fname)
     vibmat = np.zeros((npoints, nvib), dtype=float)
@@ -188,16 +176,8 @@ def parse_duo_vib_einfun(fname, npoints: int, nvib: int):
 
     return vibmat
 
-
-# =============================================================================
-# DUO rovibronic levels and coefficients
-# =============================================================================
-
+# Reading rovibrational levels energies and quantum numbers
 def read_duo_levels(fname, system, nvib_max=None, j_max=None):
-    """
-    Reads DUO rovibronic_energies.dat as a flat list of real levels.
-    No dense zero-filled arrays are used.
-    """
 
     fname = Path(fname)
     levels = []
@@ -245,44 +225,16 @@ def read_duo_levels(fname, system, nvib_max=None, j_max=None):
 
     return levels
 
-
+# Creating dictionary keys for rovibrational levels
 def level_state_key(level):
-    """
-    Test version: identify the full DUO rovibronic level only by
-    J, parity and DUO index.
-
-    This groups together the Lambda/Sigma/Omega components that belong to the
-    same parity-adapted rovibronic level, while still keeping each component's
-    Lambda/Sigma/Omega inside CoeffComponent for the Dyson contraction.
-    """
-
     return (
         level.J,
         level.parity,
         level.duo_index,
     )
 
-
-def parse_real_token(token):
-    """Parse DUO numeric tokens, including Fortran D exponents."""
-
-    return float(token.replace("D", "E").replace("d", "e"))
-
-
-def parse_int_token(token):
-    return int(float(token.replace("D", "E").replace("d", "e")))
-
-
+# Reading rovibrational basis coefficients in DUO format
 def read_coefficients(filename, debug_first_lines=0):
-    """
-    Read DUO vibeigenvect_vectors.chk components.
-
-    Layout used here, matching the printed DUO table:
-        index  J  parity  coeff  state  vib  Lambda  Spin  Sigma  Omega  ivib
-
-    The coefficient is real in this file. The `vib` column is the contracted
-    vibrational basis index used to address vibeigenvect_vib.chk.
-    """
 
     filename = Path(filename)
     tmp = defaultdict(list)
@@ -313,8 +265,6 @@ def read_coefficients(filename, debug_first_lines=0):
             except ValueError:
                 continue
 
-            # Test version: group all Lambda/Sigma/Omega components belonging
-            # to the same parity-adapted rovibronic level.
             key = (
                 J,
                 parity,
@@ -333,9 +283,8 @@ def read_coefficients(filename, debug_first_lines=0):
 
     return dict(tmp)
 
-
+# Brief diagnostic to check coefficients size, keys and orthonormality of coefficient basis
 def print_coeff_summary(coeffs, label):
-    """Small diagnostic to check whether coefficient grouping looks sane."""
 
     norms = []
     ncomps = []
@@ -363,7 +312,7 @@ def print_coeff_summary(coeffs, label):
 
 
 # =============================================================================
-# Overlaps
+# Functions to calculate relative intensity of rovibrationally ressolved spectra
 # =============================================================================
 
 def bra_ket_weighted(vib_ini, vib_fin, dyson_values):
@@ -372,9 +321,6 @@ def bra_ket_weighted(vib_ini, vib_fin, dyson_values):
     """
 
     return np.dot(vib_fin, dyson_values * vib_ini)
-
-
-
 
 # =============================================================================
 # Wigner 3j explicit expression
