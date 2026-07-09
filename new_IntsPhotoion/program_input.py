@@ -203,10 +203,10 @@ def read_duo_levels(fname, system, nvib_max=None, j_max=None):
     levels = []
 
     with open(fname, "r") as f:
-        for iline, line in enumerate(f, start=1):
+        for iline, line in enumerate(f):
             parts = line.split()
 
-            if len(parts) < 10:
+            if len(parts) < 3:
                 continue
 
             J = float(parts[0])
@@ -384,7 +384,6 @@ def kronecker_delta(i, j):
     return 1.0 if i == j else 0.0
 
 
-@lru_cache(maxsize=None)
 def fact(n):
     if n % 1 != 0:
         return 0
@@ -692,94 +691,108 @@ def precompute_dyson_values(dyson_splines, r_use):
 
     return dyson_values
 
-
-def precompute_vibrational_bk(vib_neutral_use, vib_cation_use, dyson_values_by_key):
+def precompute_vibrational_bk_matrices(
+    vib_neutral_use,
+    vib_cation_use,
+    dyson_splines,
+    r_use,
+    missing_dyson="skip",
+):
     """
-    Precompute all <chi_f(vf)|D_key(R)|chi_i(vi)> values.
+    Precompute all <chi_f(vf)|D_key(R)|chi_i(vi)> matrices.
 
-    Result shape for each key:
-        vib_bk_by_key[key][vf_basis, vi_basis]
+    Result:
+        vib_bk_by_key[keydyson][vf_basis, vi_basis]
     """
 
     vib_bk_by_key = {}
 
-    for keydyson, dyson_values in dyson_values_by_key.items():
+    for keydyson, spline in dyson_splines.items():
+        dyson_values = spline(r_use)
+
+        if np.any(~np.isfinite(dyson_values)):
+            if missing_dyson == "error":
+                raise ValueError(
+                    f"Dyson spline returned non-finite values for key {keydyson}. "
+                    f"R range used: {r_use.min()} - {r_use.max()}"
+                )
+            elif missing_dyson == "skip":
+                continue
+            else:
+                raise ValueError("missing_dyson must be 'skip' or 'error'")
+
         weighted_neutral = dyson_values[:, None] * vib_neutral_use
         vib_bk_by_key[keydyson] = vib_cation_use.T @ weighted_neutral
 
     return vib_bk_by_key
 
+def vibrational_dyson_bra_ket(vib_ini, vib_fin, dyson_values):
+    """
+    Computes <chi_f|D(R)|chi_i> on the masked R grid.
 
-def bk_Coeff(vib_ini, vib_fin, dymat):
-    intensity = (vib_fin.T @ (dymat @ vib_ini))
-    return intensity
+    This uses the current discrete DUO-grid convention:
+        sum_k chi_f(k) D(k) chi_i(k)
+    """
+
+    return np.dot(vib_fin, dyson_values * vib_ini)
 
 def transition_amplitude_component_contraction(
     level_i,
     level_f,
-    chi_i,
-    chi_f,
-    splines_dys,
+    vib_bk_matrix,
+    fc_matrix,
     components_i,
     components_f,
-    vib_bk_by_key,
     K_values,
-    missing_dyson="skip",
 ):
     matrix_element = 0.0 + 0.0j
     bk_no_rotation = 0.0 + 0.0j
+
+    coeff_sum = 0.0 + 0.0j
     coeff_abs_sum = 0.0
-    vib_abs_sum = 0.0
-    fc_overlap = 0.0
-    missing_keys = set()
+
+    bk_component_coherent = 0.0 + 0.0j
+    bk_component_coherent_abs_sum = 0.0
+
     K_values_tuple = tuple(K_values)
 
     for comp_i in components_i:
         for comp_f in components_f:
             coeff_factor = np.conj(comp_f.coeff) * comp_i.coeff
-            # coeff_sum += coeff_factor
-            coeff_abs_sum += coeff_factor
 
+            coeff_sum += coeff_factor
+            coeff_abs_sum += abs(coeff_factor)
 
-    fc_overlap = np.dot(chi_f, chi_i)
+            vib_dyson_comp = vib_bk_matrix[comp_f.v_basis, comp_i.v_basis]
 
-    keydyson = (level_i.Omega, level_f.Omega)
+            coherent_term = coeff_factor * vib_dyson_comp
+            bk_component_coherent += coherent_term
+            bk_component_coherent_abs_sum += abs(coherent_term)
 
-    bk_matrix = vib_bk_by_key[keydyson]
-    vib_part = bk_matrix[level_f.v, level_i.v]
-    dysmat = np.diag(splines_dys)
-    vib_part = bk_Coeff(chi_i, chi_f, dysmat)
-    vib_abs_sum = vib_part
-
-    # if missing_keys and missing_dyson == "error":
-    #     raise KeyError(
-    #         f"Missing Dyson keys for transition "
-    #         f"i={level_i.duo_index}, f={level_f.duo_index}: "
-    #         f"{sorted(missing_keys)}"
-    #     )
-    
+    vib_dyson = vib_bk_matrix[level_f.v, level_i.v]
+    fc_overlap = fc_matrix[level_f.v, level_i.v]
 
     rot = rotational_factor_cached(
-                level_i.J,
-                level_f.J,
-                level_i.Omega,
-                level_f.Omega,
-                K_values_tuple,
-            )
+        level_i.J,
+        level_f.J,
+        level_i.Omega,
+        level_f.Omega,
+        K_values_tuple,
+    )
 
     phase = minus_one_power(level_i.Omega)
-    bk_component = coeff_abs_sum * vib_abs_sum
-    matrix_element = phase * rot * bk_component
-    bk_no_rotation = phase * bk_component
 
-    return (
-        matrix_element,
-        bk_no_rotation,
-        coeff_abs_sum,
-        vib_abs_sum,
-        fc_overlap,
-        bk_component
-    )
+    bk_component = coeff_abs_sum * vib_dyson
+    bk_no_rotation = phase * bk_component
+    matrix_element = rot * bk_no_rotation
+
+    bk_no_rotation_coherent = phase * bk_component_coherent
+    matrix_element_coherent = rot * bk_no_rotation_coherent
+
+    return (matrix_element,bk_no_rotation,coeff_sum,coeff_abs_sum,
+        vib_dyson,fc_overlap,bk_component,
+        matrix_element_coherent,bk_no_rotation_coherent,
+        bk_component_coherent,bk_component_coherent_abs_sum,)
 
 
 def build_transition_table(
@@ -806,11 +819,15 @@ def build_transition_table(
     r_use = rvals[mask]
     vib_neutral_use = vib_neutral[mask, :]
     vib_cation_use = vib_cation[mask, :]
-    dyson_values_by_key = precompute_dyson_values(dyson_splines, r_use)
-    vib_bk_by_key = precompute_vibrational_bk(
-        vib_neutral_use,
-        vib_cation_use,
-        dyson_values_by_key,
+
+    fc_matrix = vib_cation_use.T @ vib_neutral_use
+
+    vib_bk_by_key = precompute_vibrational_bk_matrices(
+        vib_neutral_use=vib_neutral_use,
+        vib_cation_use=vib_cation_use,
+        dyson_splines=dyson_splines,
+        r_use=r_use,
+        missing_dyson=missing_dyson,
     )
 
     for level_i in tqdm(levels_neutral, desc="Neutral levels"):
@@ -851,28 +868,54 @@ def build_transition_table(
             if DeltaE_Eh <= 0.0:
                 continue
 
-            spline_dys = dyson_splines[(level_i.Omega, level_f.Omega)]
-            spline_dys = spline_dys(r_use)
+            keydyson = (level_i.Omega, level_f.Omega)
 
-            matrix_element, bk_no_rotation, coeff_abs_sum, vib_abs_sum, fc_overlap, bk_component = transition_amplitude_component_contraction(
+            if keydyson not in vib_bk_by_key:
+                if missing_dyson == "error":
+                    raise KeyError(
+                        f"Missing Dyson key {keydyson} for transition "
+                        f"i={level_i.duo_index}, f={level_f.duo_index}"
+                    )
+                elif missing_dyson == "skip":
+                    continue
+                else:
+                    raise ValueError("missing_dyson must be 'skip' or 'error'")
+
+            vib_bk_matrix = vib_bk_by_key[keydyson]
+
+            (
+                matrix_element,
+                bk_no_rotation,
+                coeff_sum,
+                coeff_abs_sum,
+                vib_dyson,
+                fc_overlap,
+                bk_component,
+                matrix_element_coherent,
+                bk_no_rotation_coherent,
+                bk_component_coherent,
+                bk_component_coherent_abs_sum,
+            ) = transition_amplitude_component_contraction(
                 level_i=level_i,
                 level_f=level_f,
-                chi_i=chi_i,
-                chi_f=chi_f,
-                splines_dys=spline_dys,
+                vib_bk_matrix=vib_bk_matrix,
+                fc_matrix=fc_matrix,
                 components_i=components_i,
                 components_f=components_f,
-                vib_bk_by_key=vib_bk_by_key,
                 K_values=K_values,
-                missing_dyson=missing_dyson,
             )
 
-            intensity = np.abs(matrix_element) ** 2
+            # intensity_amp = np.abs(matrix_element)
+            # intensity_sq = intensity_amp ** 2
+            # intensity = intensity_amp
 
-            if intensity <= min_intensity:
-                continue
+            # intensity_coherent_amp = np.abs(matrix_element_coherent)
+            # intensity_coherent_sq = intensity_coherent_amp ** 2
 
-            bk_abs = np.abs(bk_no_rotation)
+            # if intensity <= min_intensity:
+            #     continue
+
+            # bk_abs = np.abs(bk_no_rotation)
             matrix_abs = np.abs(matrix_element)
 
             rows.append(
@@ -894,18 +937,35 @@ def build_transition_table(
                     "Ei_eV": Ei_rel_Eh * EH_TO_EV,
                     "Ef_eV": Ef_rel_Eh * EH_TO_EV,
                     "DeltaE_eV": DeltaE_Eh * EH_TO_EV,
-                    "I_raw": intensity,
+                    # "I_raw": intensity,
+                    # "I_amp": intensity_amp,
+                    # "I_sq": intensity_sq,
+                    # "I_coh_amp": intensity_coherent_amp,
+                    # "I_coh_sq": intensity_coherent_sq,
                     "matrix_real": np.real(matrix_element),
                     "matrix_imag": np.imag(matrix_element),
                     "matrix_abs": matrix_abs,
-                    "bk_real": np.real(bk_no_rotation),
-                    "bk_imag": np.imag(bk_no_rotation),
-                    "bk_abs": bk_abs,
-                    "vib_abs_sum": vib_abs_sum,
-                    "fc_overlap": fc_overlap,
-                    "fc_overlap_abs": np.abs(fc_overlap),
-                    "fc_overlap_sq": np.abs(fc_overlap) ** 2,
-                    "coeff_abs_sum": coeff_abs_sum,
+                    # "bk_real": np.real(bk_no_rotation),
+                    # "bk_imag": np.imag(bk_no_rotation),
+                    # "bk_abs": bk_abs,
+                    "matrix_coh_real": np.real(matrix_element_coherent),
+                    "matrix_coh_imag": np.imag(matrix_element_coherent),
+                    "matrix_coh_abs": np.abs(matrix_element_coherent),
+                    # "bk_coh_real": np.real(bk_no_rotation_coherent),
+                    # "bk_coh_imag": np.imag(bk_no_rotation_coherent),
+                    # "bk_coh_abs": np.abs(bk_no_rotation_coherent),
+                    # "bk_coh_sum_abs": bk_component_coherent_abs_sum,
+                    # "vib_dyson_real": np.real(vib_dyson),
+                    # "vib_dyson_imag": np.imag(vib_dyson),
+                    # "vib_dyson_abs": np.abs(vib_dyson),
+                    # "fc_real": np.real(fc_overlap),
+                    # "fc_imag": np.imag(fc_overlap),
+                    # "fc_abs": np.abs(fc_overlap),
+                    # "fc_sq": np.abs(fc_overlap) ** 2,
+                    # "coeff_sum_real": np.real(coeff_sum),
+                    # "coeff_sum_imag": np.imag(coeff_sum),
+                    # "coeff_sum_abs": np.abs(coeff_sum),
+                    # "coeff_abs_sum": coeff_abs_sum,
                     "Delta_v": level_f.v - level_i.v,
                     "Delta_J": level_f.J - level_i.J,
                     "Delta_Omega": level_f.Omega - level_i.Omega,
@@ -932,10 +992,14 @@ def dump_transition_table(df, filename):
         "v_i", "J_i", "Omega_i", "Sigma_i", "Lambda_i", "parity_i", "index_i",
         "v_f", "J_f", "Omega_f", "Sigma_f", "Lambda_f", "parity_f", "index_f",
         "Ei_eV", "Ef_eV", "DeltaE_eV",
-        "I_raw",
+        # "I_raw", "I_amp", "I_sq", "I_coh_amp", "I_coh_sq",
         "matrix_real", "matrix_imag", "matrix_abs",
-        "bk_real", "bk_imag", "bk_abs",
-        "vib_abs_sum", "fc_overlap", "fc_overlap_abs", "fc_overlap_sq", "coeff_abs_sum",
+        # "bk_real", "bk_imag", "bk_abs",
+        "matrix_coh_real", "matrix_coh_imag", "matrix_coh_abs",
+        # "bk_coh_real", "bk_coh_imag", "bk_coh_abs", "bk_coh_sum_abs",
+        # "vib_dyson_real", "vib_dyson_imag", "vib_dyson_abs",
+        # "fc_real", "fc_imag", "fc_abs", "fc_sq",
+        # "coeff_sum_real", "coeff_sum_imag", "coeff_sum_abs", "coeff_abs_sum",
         "Delta_v", "Delta_J", "Delta_Omega",
     ]
 
@@ -1154,11 +1218,7 @@ def main():
 
     nvib_total, _ = args.nVJtot
     nvib_neutral, nvib_cation = args.numvib
-
-    jmax_neutral = None
-    jmax_cation = None
-    if args.numJ is not None:
-        jmax_neutral, jmax_cation = args.numJ
+    jmax_neutral, jmax_cation = (args.numJ if args.numJ is not None else (None, None))
 
     ZPE_neutral_cm, ZPE_cation_cm = args.ZPE
     Eelec_neutral_Eh, Eelec_cation_Eh = args.Etot
@@ -1166,15 +1226,15 @@ def main():
     K_values = build_K_values(args.DJ)
 
     dyson_index_to_omega = build_dyson_index_to_omega()
-
     if state_neutral not in dyson_index_to_omega:
         raise KeyError(
-            f"Unknown neutral state {state_neutral}. Available: {list(dyson_index_to_omega)}"
+            f"Unknown neutral state {state_neutral}. "
+            f"Available: {list(dyson_index_to_omega)}"
         )
-
     if state_cation not in dyson_index_to_omega:
         raise KeyError(
-            f"Unknown cation state {state_cation}. Available: {list(dyson_index_to_omega)}"
+            f"Unknown cation state {state_cation}. "
+            f"Available: {list(dyson_index_to_omega)}"
         )
 
     if args.output is None:
@@ -1183,66 +1243,34 @@ def main():
     else:
         output_file = Path(args.output)
 
-    print("----------------------------------------------------------------")
-    print("Reading vibrational eigenfunctions")
-
     vib_neutral_file = resolve_system_file(base_path, system_neutral, "vibeigenvect_vib.chk")
     vib_cation_file = resolve_system_file(base_path, system_cation, "vibeigenvect_vib.chk")
-
     vib_neutral = parse_duo_vib_einfun(vib_neutral_file, args.npts, nvib_total)
     vib_cation = parse_duo_vib_einfun(vib_cation_file, args.npts, nvib_total)
 
-    # Do not truncate these arrays to Nvib. Nvib filters the list of final
-    # rovibronic levels, but the eigenvector expansion can use a larger
-    # contracted vibrational basis through comp.v_basis.
-    print(f"Neutral vib basis shape: {vib_neutral.shape}")
-    print(f"Cation  vib basis shape: {vib_cation.shape}")
-
-    print("----------------------------------------------------------------")
-    print("Reading DUO rovibronic levels")
-
     levels_neutral_file = resolve_system_file(base_path, system_neutral, "rovibronic_energies.dat")
     levels_cation_file = resolve_system_file(base_path, system_cation, "rovibronic_energies.dat")
-
     levels_neutral = read_duo_levels(
         levels_neutral_file,
         system=system_neutral,
         nvib_max=nvib_neutral,
         j_max=jmax_neutral,
     )
-
     levels_cation = read_duo_levels(
         levels_cation_file,
         system=system_cation,
         nvib_max=nvib_cation,
         j_max=jmax_cation,
     )
-
-    print(f"Neutral levels: {len(levels_neutral)}")
-    print(f"Cation  levels: {len(levels_cation)}")
-
     if len(levels_neutral) == 0:
         raise RuntimeError("No neutral DUO levels read.")
-
     if len(levels_cation) == 0:
         raise RuntimeError("No cation DUO levels read.")
 
-    print("----------------------------------------------------------------")
-    print("Reading DUO coefficients")
-
     coeff_neutral_file = resolve_system_file(base_path, system_neutral, "vibeigenvect_vectors.chk")
     coeff_cation_file = resolve_system_file(base_path, system_cation, "vibeigenvect_vectors.chk")
-
     coeff_neutral = read_coefficients(coeff_neutral_file)
     coeff_cation = read_coefficients(coeff_cation_file)
-
-    print(f"Neutral coefficient keys: {len(coeff_neutral)}")
-    print(f"Cation  coefficient keys: {len(coeff_cation)}")
-    print_coeff_summary(coeff_neutral, "Neutral")
-    print_coeff_summary(coeff_cation, "Cation")
-
-    print("----------------------------------------------------------------")
-    print("Reading R grid")
 
     rgrid_file = base_path / "Dipole_moment_functions.dat"
     if not rgrid_file.exists():
@@ -1250,18 +1278,11 @@ def main():
 
     rvals = np.loadtxt(rgrid_file, usecols=0)
     mask = (rvals > rmin) & (rvals < rmax)
-
     if np.sum(mask) == 0:
         raise RuntimeError(
             f"Empty R mask. Requested range: {rmin} - {rmax}. "
             f"Available range: {np.min(rvals)} - {np.max(rvals)}"
         )
-
-    print(f"R used: {rvals[mask].min()} - {rvals[mask].max()}")
-    print(f"R points used: {np.sum(mask)}")
-
-    print("----------------------------------------------------------------")
-    print("Reading Dyson splines")
 
     dyson_splines, _, _ = read_dyson_splines(
         d_neutral=dyson_index_to_omega[state_neutral],
@@ -1272,11 +1293,6 @@ def main():
         bohr_to_angstrom=True,
         extrapolate=args.extrapolate,
     )
-
-    print(f"Dyson spline keys: {len(dyson_splines)}")
-
-    print("----------------------------------------------------------------")
-    print("Building transition table")
 
     df = build_transition_table(
         levels_neutral=levels_neutral,
@@ -1298,23 +1314,7 @@ def main():
         min_intensity=args.min_intensity,
     )
 
-    if np.any(df["index_i"] <= 0):
-        raise RuntimeError("Found neutral DUO index <= 0 in output table.")
-
-    if np.any(df["index_f"] <= 0):
-        raise RuntimeError("Found cation DUO index <= 0 in output table.")
-
-    print(f"Transitions: {len(df)}")
-    print(f"Total I_raw: {df['I_raw'].sum():.10e}")
-    print(f"Max   I_raw: {df['I_raw'].max():.10e}")
-
-    print("----------------------------------------------------------------")
-    print("Writing output")
-
     dump_transition_table(df, output_file)
-
-    print("----------------------------------------------------------------")
-    print("Done")
 
 
 if __name__ == "__main__":
